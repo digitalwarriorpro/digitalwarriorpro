@@ -1,0 +1,21 @@
+services:
+  backend:
+    build: ./backend
+    env_file: .env.local
+    environment:
+      - PORT=3000
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      - VITE_PROXY_TARGET=http://backend:3000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+    depends_on:
+      - backend
