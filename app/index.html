@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#141A21">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Knock">
+<title>Dano's Dents Knock</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/supabase.js"></script>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <div class="top-row">
+      <div class="brand">Dano's Dents <span>Knock</span></div>
+      <button class="rep" id="rep-btn" aria-label="Account and settings"><span id="rep-name">—</span><span class="avatar" id="rep-av" aria-hidden="true">?</span></button>
+    </div>
+    <div class="shift" id="shift"></div>
+    <div class="netbar" id="netbar" hidden></div>
+  </header>
+
+  <div class="views">
+    <section class="view" id="v-map" aria-label="Doors">
+      <div id="map" aria-label="Map of doors"></div>
+      <div class="view walk" id="walk" hidden></div>
+      <div class="overlay-top">
+        <div class="seg" role="group" aria-label="Map or list">
+          <button data-mode="map" aria-pressed="true">Map</button>
+          <button data-mode="list" aria-pressed="false">Nearby list</button>
+        </div>
+        <div class="chips" id="filters" role="group" aria-label="Show doors"></div>
+      </div>
+      <div class="ctrls" id="ctrls">
+        <button class="ctrl" data-c="me" aria-label="Follow my location"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="3"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></svg></button>
+        <button class="ctrl" data-c="load" aria-label="Load doors on screen"><svg viewBox="0 0 20 20"><path d="M3 9 10 3l7 6v8H3z"/><path d="M8 17v-5h4v5"/></svg></button>
+        <button class="ctrl" data-c="add" aria-label="Add a door at the map center"><svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></button>
+      </div>
+      <div class="crosshair" id="crosshair" hidden aria-hidden="true"></div>
+      <div class="nextbar" id="nextbar"></div>
+    </section>
+    <section class="view" id="v-leads" hidden aria-label="Leads"></section>
+    <section class="view" id="v-today" hidden aria-label="Today"></section>
+    <div class="scrim" id="sheet-host"></div>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="t-map" aria-selected="true" data-tab="map"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>Doors</button>
+    <button role="tab" id="t-leads" aria-selected="false" data-tab="leads"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Leads<span class="badge" id="lead-badge" hidden></span></span></button>
+    <button role="tab" id="t-today" aria-selected="false" data-tab="today"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Today</button>
+  </nav>
+  <div class="toast" id="toast" hidden><span id="toast-msg"></span><button id="toast-undo" hidden>Undo</button></div>
+  <input type="file" id="photo-in" accept="image/*" capture="environment" multiple hidden>
+  <input type="file" id="csv-in" accept=".csv,text/csv" hidden>
+</div>
+
+<div class="gate" id="gate" hidden></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
