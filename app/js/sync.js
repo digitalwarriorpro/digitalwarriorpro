@@ -72,6 +72,17 @@ export const sync = {
     return data || [];
   },
 
+  // Team-wide settings (e.g. the property data key) live in the database, not in the published code.
+  async getTeamSetting(key) {
+    if (!sb || !user) return null;
+    const { data } = await sb.from("app_settings").select("value").eq("key", key).maybeSingle();
+    return data?.value ?? null;
+  },
+  async setTeamSetting(key, value) {
+    const { error } = await sb.from("app_settings").upsert({ key, value });
+    if (error) throw error;
+  },
+
   async photoUrl(path) {
     if (!sb) return null;
     const { data } = await sb.storage.from("damage").createSignedUrl(path, 3600);

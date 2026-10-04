@@ -105,6 +105,12 @@ button{cursor:pointer}
 .qa.wide{grid-column:1/-1}
 .inline-check{display:flex;gap:9px;align-items:center;font-size:13.5px}
 .inline-check input{width:20px;height:20px;accent-color:var(--accent);flex:none}
+.home{border:1px solid var(--line);border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:8px}
+.owner{font-family:var(--display);font-weight:700;font-stretch:85%;font-size:18px;line-height:1.15}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:8px}
+.stats div{display:flex;flex-direction:column;gap:1px}
+.stats b{font-family:var(--display);font-weight:700;font-stretch:85%;font-size:19px;font-variant-numeric:tabular-nums}
+.stats span{font-size:11px;color:var(--muted)}
 .history{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
 .history div{display:flex;gap:8px}
 .history time{font-family:var(--mono);font-size:11px;color:var(--faint);min-width:64px;flex:none}

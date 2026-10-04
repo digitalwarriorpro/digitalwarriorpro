@@ -38,4 +38,7 @@ export const CONFIG = {
   nominatimUrl: "https://nominatim.openstreetmap.org/reverse",
 
   goals: { doors: 60, booked: 4 },
+
+  // "$300K+ homes" filter on the map
+  valueFilter: 300000,
 };

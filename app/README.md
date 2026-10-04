@@ -41,18 +41,35 @@ mailbox under **Authentication → Emails → SMTP Settings**.
 
 Optional: point `knock.danosdents.com` at it under **Settings → Pages → Custom domain**.
 
-### 3. Shop details (2 minutes)
+### 3. Homeowner and home value lookups: Regrid (about 10 minutes)
+
+Owner names, owner-lives-here vs. rental, county home value, year built, square feet and last sale come
+from county property records through [Regrid](https://regrid.com), which covers every KC metro county
+(Johnson, Wyandotte, Jackson, Clay, Platte, Cass and the rest) with one API.
+
+1. Sign up for a Regrid API plan and copy your API token. It's a paid service; check current pricing on their site.
+2. In the app: tap your name → **Homeowner and home value lookups** → paste the token → **Save for the whole team**.
+   The token is stored in the team database (reps only), not in the published code.
+3. From then on, opening a door looks up its owner automatically, once. The result is saved on the door
+   and shared with everyone, so each house is only paid for once. **Look up owners for doors on the map
+   screen** does a whole block at once (up to 250 doors per tap).
+
+No Regrid plan? Download a parcel export from the county (most offer CSV with owner and appraised value)
+and import it under **Add doors from a list**. Columns it reads: `owner`, `mailing address`, `home value`
+(or `appraised value` / `market value`), `year built`, `sqft`, `sale date`, `sale price`, `parcel`.
+
+### 4. Shop details (2 minutes)
 
 In [`js/config.js`](js/config.js), fill in `shopAddress` and `shopPhone` (they go into confirmation
 texts and calendar invites), check the `storms` list and the inspection `times`, and commit.
 
-### 4. On each phone (2 minutes per rep)
+### 5. On each phone (2 minutes per rep)
 
 1. Open the app link in **Safari** (iPhone) or **Chrome** (Android).
 2. **Share → Add to Home Screen** (iPhone) or **⋮ → Install app** (Android), then open it from the home screen.
 3. Allow location, enter the email Dano added, and type in the 6-digit code from the email.
 
-### 5. Before heading out (on Wi-Fi)
+### 6. Before heading out (on Wi-Fi)
 
 1. Zoom the map to the turf (a few blocks at a time) and tap the **house** button to load every address on
    screen. Name the turf and assign it to a rep.
@@ -68,6 +85,10 @@ texts and calendar invites), check the `storms` list and the inspection `times`,
 - After a booking or lead: **Text confirmation**, **Call** or **Add to calendar**, each one tap from the porch.
   Texts go from the rep's own phone with the message already written.
 - **+** drops a door by hand at the circle in the middle of the map, for houses the address data misses.
+- **Homeowner** card on each door: owner on record, whether the owner lives there or it's likely a rental
+  (mail goes to another address), home value, year built, square feet and last sale. The Contact step offers
+  **Use owner on record** to fill the name. Filters: **Owner lives here** and **$300K+ homes**
+  (threshold in `config.js → valueFilter`). Lead exports include all of it.
 - **Undo** appears for 6 seconds after every save.
 - **Leads** lists bookings, quotes and come-backs (yours or the whole team's) and exports a CSV for the
   master lead sheet. **Today** shows your doors, bookings, rate per hour and the crew board.
@@ -84,6 +105,8 @@ texts and calendar invites), check the `storms` list and the inspection `times`,
   carrier registration (A2P 10DLC), which takes 1–3 weeks to approve. Until then, texts go from the rep's phone.
 - **Calendar**: *Add to calendar* opens Google Calendar with the inspection filled in. Sign the phone into the
   shop's Google account if bookings should land on the shared calendar.
+- **Owner info is county data**: it can be months out of date, and whoever answers may not be the owner.
+  Use it to know who you're likely talking to, not to greet people by a name you haven't confirmed.
 - **Double-booking**: the app hides taken slots, but two reps booking the same slot while both offline will
   both save. Both show on the Leads tab.
 
@@ -95,6 +118,7 @@ js/main.js                 Map, knock flow, leads, today, settings
 js/store.js                On-phone database (IndexedDB) and outbox
 js/sync.js                 Supabase sign-in, push/pull, live updates
 js/addresses.js            OpenStreetMap address lookups and CSV import/export
+js/property.js             Homeowner and home value lookups (Regrid) and county CSV columns
 js/config.js               Team settings (Supabase keys, shop, storms, slots, tiles)
 sw.js, manifest.webmanifest  Offline support and home-screen install
 vendor/                    Leaflet 1.9.4 and supabase-js 2.45.4, bundled so the app never depends on a CDN

@@ -2,6 +2,7 @@ import { CONFIG } from "./config.js";
 import { store } from "./store.js";
 import { sync, connection, saveConnection } from "./sync.js";
 import { addressesInView, reverseLookup, parseCsv, toCsv } from "./addresses.js";
+import { lookupProperty, propertyEnabled, money } from "./property.js";
 
 /* ================= constants ================= */
 const S = {
@@ -51,6 +52,9 @@ let undo = null, lastSaved = null;
 let reps = [];
 const photoUrls = new Map();
 let outboxN = 0;
+let propSettings = { regridToken: "" };
+const lookingUp = new Set();
+const PROP_FIELDS = ["owner", "owner_occupied", "mailing_address", "home_value", "value_type", "year_built", "sqft", "last_sale_date", "last_sale_price", "parcel_id", "land_use", "prop_source", "prop_checked_at"];
 
 /* ================= slots ================= */
 function slotList() {
@@ -79,11 +83,12 @@ function newDoor(base) {
     status: "none", attempts: 0, hanger: false, back_when: "", reason: "", vehicles: [],
     name: base.name || "", phone: base.phone || "", email: "", contact_pref: "Text", consent: false,
     slot: null, notes: base.notes || "", storm: CONFIG.storms[0] || "", photos: [],
+    ...Object.fromEntries(PROP_FIELDS.map((k) => [k, base[k] ?? (["owner_occupied", "home_value", "year_built", "sqft", "last_sale_price", "prop_checked_at"].includes(k) ? null : "")])),
     created_at: nowIso(), updated_at: nowIso(), updated_by: rep.id || null, updated_by_name: rep.name,
   };
 }
 const isMine = (d) => !d.assigned_to || d.assigned_to === rep.name;
-const matches = (d, f = filter) => f === "all" ? true : f === "mine" ? isMine(d) : f === "todo" ? d.status === "none" : f === "revisit" ? (d.status === "back" || d.status === "nothome") : f === "leads" ? (d.status === "lead" || d.status === "booked") : true;
+const matches = (d, f = filter) => f === "all" ? true : f === "mine" ? isMine(d) : f === "todo" ? d.status === "none" : f === "revisit" ? (d.status === "back" || d.status === "nothome") : f === "leads" ? (d.status === "lead" || d.status === "booked") : f === "owners" ? d.owner_occupied === true : f === "value" ? (d.home_value || 0) >= CONFIG.valueFilter : true;
 function dist(a, b) {
   const R = 6371e3, t = Math.PI / 180;
   const dLat = (b.lat - a.lat) * t, dLng = (b.lng - a.lng) * t;
@@ -191,7 +196,7 @@ function renderNet() {
 function renderFilters() {
   const all = [...doors.values()];
   const n = (f) => all.filter((d) => matches(d, f)).length;
-  $("#filters").innerHTML = [["all", "All"], ["mine", "My turf"], ["todo", "To knock"], ["revisit", "Revisit"], ["leads", "Leads"]]
+  $("#filters").innerHTML = [["all", "All"], ["mine", "My turf"], ["todo", "To knock"], ["revisit", "Revisit"], ["leads", "Leads"], ["owners", "Owner lives here"], ["value", `${money(CONFIG.valueFilter)}+ homes`]]
     .map(([k, l]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l} <span class="n">${n(k)}</span></button>`).join("");
   document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === mode));
   $("#walk").hidden = mode !== "list";
@@ -225,7 +230,7 @@ function renderWalk() {
   const list = [...doors.values()].filter((d) => matches(d)).map((d) => ({ d, m: dist(o, d) })).sort((a, b) => a.m - b.m).slice(0, 80);
   $("#walk").innerHTML = (list.length ? list.map(({ d, m }) => `
     <div class="wrow"><div style="min-width:0"><button class="waddr" data-open="${esc(d.id)}">${esc(d.address)}</button>
-      <div class="wsub"><span class="pill"><i style="background:${colorOf(d.status)}"></i>${S[d.status].l}${d.status === "nothome" ? ` ×${d.attempts}` : ""}</span><span>· ${fmtDist(m)}</span>${d.back_when && d.status === "back" ? `<span>· ${esc(d.back_when)}</span>` : ""}${d.slot && d.status === "booked" ? `<span>· ${esc(slotLabel(d.slot))}</span>` : ""}</div></div>
+      <div class="wsub"><span class="pill"><i style="background:${colorOf(d.status)}"></i>${S[d.status].l}${d.status === "nothome" ? ` ×${d.attempts}` : ""}</span><span>· ${fmtDist(m)}</span>${d.home_value ? `<span>· ${money(d.home_value)}</span>` : ""}${d.owner ? `<span>· ${esc(d.owner)}</span>` : ""}${d.back_when && d.status === "back" ? `<span>· ${esc(d.back_when)}</span>` : ""}${d.slot && d.status === "booked" ? `<span>· ${esc(slotLabel(d.slot))}</span>` : ""}</div></div>
       ${["none", "nothome", "back"].includes(d.status) ? `<button class="qbtn" data-nh="${esc(d.id)}">Not home</button>` : `<button class="qbtn" data-open="${esc(d.id)}">Open</button>`}
     </div>`).join("") : `<div class="empty">No doors match. Switch to the map, zoom to a street and tap the house button to load doors.</div>`)
     + `<p class="note">Sorted by distance from ${me ? "you" : "the map center"}.</p>`;
@@ -240,6 +245,7 @@ function openPeek(id) {
   sheet = "peek"; openObj = -1; draft = null;
   if (tab !== "map") setTab("map");
   follow = false;
+  if (!sel.prop_checked_at && propertyEnabled(propSettings)) lookupDoor(sel, true).catch(() => {});
   const pt = map.project([sel.lat, sel.lng], Math.max(map.getZoom(), 17));
   map.setView(map.unproject(pt.add([0, map.getSize().y * 0.25]), Math.max(map.getZoom(), 17)), Math.max(map.getZoom(), 17));
   renderAll();
@@ -268,6 +274,63 @@ function facts(d) {
     ${me ? `<span class="fact">${fmtDist(dist(me, d))} away</span>` : ""}
   </div>`;
 }
+function homeInfo(d) {
+  if (lookingUp.has(d.id)) return `<div class="home"><div class="label">Homeowner</div><p class="note">Looking up county records…</p></div>`;
+  if (!d.prop_checked_at) {
+    return propertyEnabled(propSettings)
+      ? `<div class="home"><div class="label">Homeowner</div><button class="btn" data-a="lookup">Look up owner and home value</button></div>`
+      : "";
+  }
+  if (!d.owner && !d.home_value && !d.year_built) return `<div class="home"><div class="label">Homeowner</div><p class="note">No county record found for this spot.${propertyEnabled(propSettings) ? ` <button class="btn link" style="padding:0" data-a="lookup">Try again</button>` : ""}</p></div>`;
+  const stats = [
+    d.home_value ? `<div><b>${money(d.home_value)}</b><span>${esc(d.value_type || "Value")}</span></div>` : "",
+    d.year_built ? `<div><b>${d.year_built}</b><span>Built</span></div>` : "",
+    d.sqft ? `<div><b>${Number(d.sqft).toLocaleString()}</b><span>Sq ft</span></div>` : "",
+    d.last_sale_price || d.last_sale_date ? `<div><b>${d.last_sale_price ? money(d.last_sale_price) : "—"}</b><span>Sold ${esc(fmtSale(d.last_sale_date))}</span></div>` : "",
+  ].filter(Boolean).join("");
+  const occ = d.owner_occupied === true ? `<span class="fact hot">Owner lives here</span>` : d.owner_occupied === false ? `<span class="fact">Owner lives elsewhere · likely a rental</span>` : "";
+  return `<div class="home">
+    <div class="label">Homeowner</div>
+    <div class="owner">${esc(d.owner || "Owner not listed")}</div>
+    ${occ ? `<div class="facts">${occ}</div>` : ""}
+    ${d.owner_occupied === false && d.mailing_address ? `<p class="note">Owner mail goes to ${esc(d.mailing_address)}</p>` : ""}
+    ${stats ? `<div class="stats">${stats}</div>` : ""}
+    <p class="note">County records via ${esc(d.prop_source || "import")}${d.prop_checked_at ? `, checked ${esc(new Date(d.prop_checked_at).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" }))}` : ""}. Whoever answers may not be the owner.</p>
+  </div>`;
+}
+const fmtSale = (s) => { if (!s) return ""; const d = new Date(s); return isNaN(d) ? String(s) : d.toLocaleDateString("en-US", { month: "numeric", year: "numeric" }); };
+async function lookupDoor(d, quiet) {
+  if (!propertyEnabled(propSettings) || lookingUp.has(d.id) || !navigator.onLine) return false;
+  lookingUp.add(d.id);
+  if (sel?.id === d.id && sheet === "peek") renderSheet();
+  try {
+    const info = await lookupProperty(d.lat, d.lng, propSettings);
+    const cur = doors.get(d.id) || d;
+    Object.assign(cur, info);
+    await saveDoor(cur);
+    return true;
+  } catch (err) {
+    if (!quiet) toast(err.message);
+    throw err;
+  } finally {
+    lookingUp.delete(d.id);
+    if (sel?.id === d.id && sheet === "peek") { sel = doors.get(d.id); renderSheet(); }
+  }
+}
+async function lookupOnScreen() {
+  const b = map.getBounds();
+  const todo = [...doors.values()].filter((d) => !d.prop_checked_at && b.contains([d.lat, d.lng])).slice(0, 250);
+  if (!todo.length) return toast("Every door on screen already has owner info.");
+  let ok = 0;
+  for (const d of todo) {
+    toast(`Looking up owners… ${ok + 1} of ${todo.length}`);
+    try { await lookupDoor(d, true); ok++; } catch (err) { toast(err.message); break; }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  renderAll();
+  toast(`Owner info added to ${ok} door${ok === 1 ? "" : "s"}`);
+}
+
 function history(d) {
   const vs = visits.filter((v) => v.door_id === d.id).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8);
   return vs.length ? `<div><div class="label" style="margin-bottom:6px">History</div><div class="history">${vs.map((v) => `<div><time>${esc(isToday(v.at) ? timeShort(v.at) : new Date(v.at).toLocaleDateString("en-US", { month: "numeric", day: "numeric" }))}</time><span>${esc(S[v.outcome]?.l || v.outcome)}${v.details?.reason ? ` · ${esc(v.details.reason)}` : ""}${v.details?.slot ? ` · ${esc(slotLabel(v.details.slot))}` : ""} · ${esc(v.rep_name || "")}</span></div>`).join("")}</div></div>` : "";
@@ -327,7 +390,7 @@ function renderSheet() {
     }
     host.innerHTML = `<div class="sheet peek" role="dialog" aria-label="${esc(d.address)}"><div class="sheet-scroll"><div class="grab"></div>${head(d, true)}
       ${sheet === "edit-addr" ? `<div class="row"><button class="btn go" data-a="save-addr">Save address</button><button class="btn" data-a="peek">Cancel</button></div>` : ""}
-      ${facts(d)}${body}${history(d)}</div></div>`;
+      ${facts(d)}${homeInfo(d)}${body}${history(d)}</div></div>`;
     loadPhotos();
     return;
   }
@@ -385,7 +448,8 @@ function renderSheet() {
   }
   if (cur === "Contact") {
     body = `<div class="fields">
-      <div class="field wide"><label for="c-name">Name</label><input type="text" id="c-name" data-k="name" value="${esc(draft.name)}" placeholder="First and last name" autocomplete="off"></div>
+      <div class="field wide"><label for="c-name">Name</label><input type="text" id="c-name" data-k="name" value="${esc(draft.name)}" placeholder="First and last name" autocomplete="off">
+        ${sel.owner && draft.name !== sel.owner ? `<button class="btn link" style="align-self:flex-start;padding:2px 0" data-a="use-owner">Use owner on record: ${esc(sel.owner)}</button>` : ""}</div>
       <div class="field"><label for="c-phone">Phone</label><input type="tel" id="c-phone" data-k="phone" value="${esc(draft.phone)}" placeholder="(913) 555-0100" autocomplete="off"></div>
       <div class="field"><label for="c-email">Email (optional)</label><input type="email" id="c-email" data-k="email" value="${esc(draft.email)}" autocomplete="off"></div>
     </div>
@@ -487,6 +551,8 @@ $("#sheet-host").addEventListener("click", async (e) => {
   if (a === "next-door") return goNext(sel.id);
   if (a === "addveh") { draft.vehicles.push({ ymm: "", panels: [], sev: "", insurer: "", claim: "" }); return renderSheet(); }
   if (a === "do-import") return doImport();
+  if (a === "lookup") { lookupDoor(sel).catch(() => {}); return; }
+  if (a === "use-owner") { draft.name = sel.owner; return renderSheet(); }
   if (t.dataset.delveh != null) { draft.vehicles.splice(+t.dataset.delveh, 1); return renderSheet(); }
   if (t.dataset.step != null) { step = +t.dataset.step; return renderSheet(); }
   if (t.dataset.obj != null) { openObj = openObj === +t.dataset.obj ? -1 : +t.dataset.obj; return renderSheet(); }
@@ -509,7 +575,9 @@ async function saveFlow() {
   if ((draft.status === "lead" || draft.status === "booked") && digits(draft.phone).length < 10) { step = steps.indexOf("Contact"); renderSheet(); $("#c-phone")?.focus(); return toast("Add a 10-digit phone number to save this lead"); }
   const d = sel, before = clone(d);
   const wasOpen = ["none", "nothome", "back"].includes(d.status);
-  Object.assign(d, draft);
+  // keep owner info that arrived while the rep was filling in the flow
+  const props = d.prop_checked_at ? Object.fromEntries(PROP_FIELDS.map((k) => [k, d[k]])) : {};
+  Object.assign(d, draft, props);
   d.vehicles = (d.vehicles || []).filter((v) => v.ymm || v.panels.length || v.insurer);
   if (d.status !== "booked") d.slot = null;
   if (wasOpen) d.attempts = (d.attempts || 0) + 1;
@@ -641,8 +709,10 @@ function exportCsv() {
     address: d.address, city: d.city, zip: d.zip, storm_date: d.storm, inspection: slotLabel(d.slot), come_back: d.back_when, reason: d.reason,
     vehicles: (d.vehicles || []).map((v) => `${v.ymm} [${v.panels.join("/")}] ${v.sev || ""} ${v.insurer || ""} ${v.claim || ""}`.trim()).join("; "),
     notes: d.notes, source: "Door knock", turf: d.turf, rep: d.updated_by_name, updated: d.updated_at,
+    owner_on_record: d.owner, owner_lives_here: d.owner_occupied == null ? "" : d.owner_occupied ? "yes" : "no", owner_mailing: d.mailing_address,
+    home_value: d.home_value || "", year_built: d.year_built || "", sqft: d.sqft || "", last_sale: [fmtSale(d.last_sale_date), d.last_sale_price || ""].filter(Boolean).join(" "), parcel: d.parcel_id,
   }));
-  const csv = toCsv(rows, ["status", "name", "phone", "email", "contact_pref", "ok_to_text", "address", "city", "zip", "storm_date", "inspection", "come_back", "reason", "vehicles", "notes", "source", "turf", "rep", "updated"]);
+  const csv = toCsv(rows, ["status", "name", "phone", "email", "contact_pref", "ok_to_text", "address", "city", "zip", "storm_date", "inspection", "come_back", "reason", "vehicles", "notes", "source", "turf", "rep", "updated", "owner_on_record", "owner_lives_here", "owner_mailing", "home_value", "year_built", "sqft", "last_sale", "parcel"]);
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   a.download = `danos-dents-leads-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -710,8 +780,12 @@ function showGate(kind, msg) {
       <div class="notice">${sync.enabled ? (sync.user ? `Signed in as <strong>${esc(sync.user.email)}</strong>` : "Team database connected, not signed in") : "Single-phone mode: nothing leaves this phone"} · ${outboxN} change${outboxN === 1 ? "" : "s"} waiting</div>
       <div class="row">${sync.enabled && sync.user ? `<button class="btn" data-g="sync">Sync now</button><button class="btn danger" data-g="signout">Sign out</button>` : ""}</div>
       ${connForm(c)}</section>
+    <section><div class="label">Homeowner and home value lookups</div>
+      <p class="note">Owner names, home values, year built and last sale come from county records through Regrid (regrid.com, paid API). Each house is looked up once and shared with the team.</p>
+      <form id="f-prop" class="field"><label for="g-regrid">Regrid API token</label><input type="text" id="g-regrid" value="${esc(propSettings.regridToken)}" autocomplete="off" placeholder="Paste token"><button class="btn" style="margin-top:8px">Save${sync.enabled && sync.user ? " for the whole team" : " on this phone"}</button></form>
+      ${propertyEnabled(propSettings) ? `<button class="btn" data-g="lookup-screen">Look up owners for doors on the map screen</button>` : ""}</section>
     <section><div class="label">Add doors from a list</div>
-      <p class="note">CSV with columns address, lat, lng (optional: city, zip, name, phone, notes). Works with county parcel exports and Hail Recon lists.</p>
+      <p class="note">CSV with columns address, lat, lng. Optional: owner, mailing address, home value, year built, sqft, sale date, sale price, parcel, plus city, zip, name, phone, notes. Works with county parcel exports and Hail Recon lists.</p>
       <label class="btn" for="csv-in">Choose CSV file</label></section>
     <section><div class="label">This phone</div>
       <p class="note">${doors.size} doors and ${visits.length} visits stored. Add the app to your home screen from the browser's Share menu so it opens full screen and works offline.</p></section>
@@ -746,6 +820,12 @@ $("#gate").addEventListener("submit", async (e) => {
       $("#gate").hidden = true; await boot();
     }
     if (f === "f-conn") { saveConnection($("#g-url").value, $("#g-key").value); location.reload(); }
+    if (f === "f-prop") {
+      propSettings.regridToken = $("#g-regrid").value.trim();
+      try { localStorage.setItem("knock.regrid", propSettings.regridToken); } catch {}
+      if (sync.enabled && sync.user) await sync.setTeamSetting("regrid_token", propSettings.regridToken);
+      toast(propSettings.regridToken ? "Property lookups are on" : "Property lookups are off"); showGate("settings");
+    }
   } catch (err) {
     const msg = /not.*found|signups/i.test(err.message) ? "That email isn't on the team yet. Ask Dano to add you." : /expired|invalid/i.test(err.message) ? "That code didn't work. Check it, or request a new one." : err.message;
     if (f === "f-email" || f === "f-code") showGate("signin", msg); else toast(msg);
@@ -757,6 +837,7 @@ $("#gate").addEventListener("click", async (e) => {
   if (g === "local") { saveConnection("", ""); location.reload(); return; }
   if (g === "sync") { await sync.push(); await sync.pull(); toast("Synced"); showGate("settings"); }
   if (g === "signout") { await sync.signOut(); location.reload(); }
+  if (g === "lookup-screen") { $("#gate").hidden = true; setTab("map"); lookupOnScreen(); }
 });
 $("#rep-btn").addEventListener("click", () => showGate("settings"));
 $("#csv-in").addEventListener("change", async (e) => {
@@ -830,6 +911,7 @@ async function boot() {
   (await store.allDoors()).forEach((d) => doors.set(d.id, d));
   visits = await store.allVisits();
   outboxN = await store.outboxCount();
+  try { propSettings.regridToken = localStorage.getItem("knock.regrid") || ""; } catch {}
   initMap(); paintAll();
   const ds = [...doors.values()];
   if (ds.length && !me) map.fitBounds(L.latLngBounds(ds.map((d) => [d.lat, d.lng])).pad(0.1), { maxZoom: 17 });
@@ -837,6 +919,8 @@ async function boot() {
   startGps();
   if (sync.enabled && sync.user) {
     reps = await sync.reps().catch(() => []);
+    const tok = await sync.getTeamSetting("regrid_token").catch(() => null);
+    if (tok != null) { propSettings.regridToken = tok; try { localStorage.setItem("knock.regrid", tok); } catch {} }
     await sync.push(); await sync.pull(); sync.live();
     setInterval(() => sync.push().then(() => sync.pull()), 60000);
   }

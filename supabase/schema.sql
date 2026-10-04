@@ -104,3 +104,28 @@ drop policy if exists damage_write on storage.objects;
 create policy damage_write on storage.objects for insert to authenticated with check (bucket_id = 'damage' and public.is_rep());
 drop policy if exists damage_update on storage.objects;
 create policy damage_update on storage.objects for update to authenticated using (bucket_id = 'damage' and public.is_rep());
+
+-- Homeowner and home value (county records via Regrid or a CSV import)
+alter table public.doors add column if not exists owner text default '';
+alter table public.doors add column if not exists owner_occupied boolean;
+alter table public.doors add column if not exists mailing_address text default '';
+alter table public.doors add column if not exists home_value numeric;
+alter table public.doors add column if not exists value_type text default '';
+alter table public.doors add column if not exists year_built int;
+alter table public.doors add column if not exists sqft int;
+alter table public.doors add column if not exists last_sale_date text default '';
+alter table public.doors add column if not exists last_sale_price numeric;
+alter table public.doors add column if not exists parcel_id text default '';
+alter table public.doors add column if not exists land_use text default '';
+alter table public.doors add column if not exists prop_source text default '';
+alter table public.doors add column if not exists prop_checked_at timestamptz;
+
+-- Team-wide settings, such as the property data key (readable by reps only, never in the published code)
+create table if not exists public.app_settings (
+  key text primary key,
+  value text,
+  updated_at timestamptz not null default now()
+);
+alter table public.app_settings enable row level security;
+drop policy if exists app_settings_all on public.app_settings;
+create policy app_settings_all on public.app_settings for all to authenticated using (public.is_rep()) with check (public.is_rep());

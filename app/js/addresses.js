@@ -1,6 +1,7 @@
 // Turning places into doors: OpenStreetMap address points for the area on screen,
 // a reverse lookup for a single dropped pin, and CSV lists (county parcels, Hail Recon exports).
 import { CONFIG } from "./config.js";
+import { fromCsvRow } from "./property.js";
 
 export async function addressesInView(bounds, limit = 800) {
   const s = bounds.getSouth(), w = bounds.getWest(), n = bounds.getNorth(), e = bounds.getEast();
@@ -42,7 +43,8 @@ export async function reverseLookup(lat, lng) {
   };
 }
 
-// CSV with a header row. Needs address + lat + lng (or latitude/longitude). Optional: city, zip, name, phone, notes.
+// CSV with a header row. Needs address + lat + lng (or latitude/longitude). Optional: city, zip, name, phone, notes,
+// and county record columns: owner, mailing address, home value, year built, sqft, sale date, sale price, parcel.
 export function parseCsv(text) {
   const rows = [];
   let row = [], cell = "", q = false;
@@ -71,7 +73,9 @@ export function parseCsv(text) {
       const lat = parseFloat(r[iLat]), lng = parseFloat(r[iLng]);
       if (!isFinite(lat) || !isFinite(lng)) return null;
       const address = r[iA].trim();
+      const get = (...names) => { const i = head.findIndex((h) => names.includes(h)); return i >= 0 ? String(r[i] ?? "").trim() : ""; };
       return {
+        ...fromCsvRow(get),
         id: "csv:" + address.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ":" + lat.toFixed(5) + "," + lng.toFixed(5),
         lat, lng, address,
         street: address.replace(/^\d+[a-z]?\s+/i, ""),

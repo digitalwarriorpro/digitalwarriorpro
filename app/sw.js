@@ -1,9 +1,9 @@
 // Offline support: the app shell and libraries are cached on install; map tiles are cached
 // as reps view them, so a street they've looked at once still shows with no signal.
-const VERSION = "knock-v1";
+const VERSION = "knock-v2";
 const SHELL = [
   "./", "index.html", "styles.css", "manifest.webmanifest", "icon.svg", "icon-180.png", "icon-512.png",
-  "js/main.js", "js/config.js", "js/store.js", "js/sync.js", "js/addresses.js",
+  "js/main.js", "js/config.js", "js/store.js", "js/sync.js", "js/addresses.js", "js/property.js",
   "vendor/leaflet/leaflet.css", "vendor/leaflet/leaflet.js", "vendor/supabase.js", "vendor/591.supabase.js",
 ];
 const TILE_CACHE = "knock-tiles";
@@ -21,7 +21,7 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   // Never cache API traffic (Supabase, address lookups)
-  if (/supabase\.co$/.test(url.hostname) || /overpass|nominatim/.test(url.hostname)) return;
+  if (/supabase\.co$/.test(url.hostname) || /overpass|nominatim|regrid/.test(url.hostname)) return;
 
   if (/tile|basemaps|maptiler|stadiamaps|mapbox/.test(url.hostname) || /\/\d+\/\d+\/\d+(@2x)?\.(png|jpg|webp|pbf)/.test(url.pathname)) {
     e.respondWith(tile(req));
