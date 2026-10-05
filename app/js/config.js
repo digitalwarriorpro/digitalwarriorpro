@@ -34,7 +34,13 @@ export const CONFIG = {
   startView: { lat: 38.99, lng: -94.63, zoom: 11 },
 
   // Address lookups (free OpenStreetMap services, fair-use limits apply)
-  overpassUrl: "https://overpass-api.de/api/interpreter",
+  // Address servers, tried in order: the main one is often busy, so the app falls back to the mirrors
+  overpassUrls: [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+  ],
   nominatimUrl: "https://nominatim.openstreetmap.org/reverse",
 
   goals: { doors: 60, booked: 4 },

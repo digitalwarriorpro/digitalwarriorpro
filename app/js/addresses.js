@@ -7,9 +7,7 @@ export async function addressesInView(bounds, limit = 800) {
   const s = bounds.getSouth(), w = bounds.getWest(), n = bounds.getNorth(), e = bounds.getEast();
   const bbox = `${s},${w},${n},${e}`;
   const q = `[out:json][timeout:25];(node["addr:housenumber"]["addr:street"](${bbox});way["addr:housenumber"]["addr:street"](${bbox}););out center ${limit};`;
-  const res = await fetch(CONFIG.overpassUrl, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
-  if (!res.ok) throw new Error(res.status === 429 ? "The address service is busy. Try again in a minute." : `Address lookup failed (${res.status}).`);
-  const json = await res.json();
+  const json = await overpass(q);
   return json.elements
     .map((el) => {
       const t = el.tags || {};
@@ -26,6 +24,24 @@ export async function addressesInView(bounds, limit = 800) {
       };
     })
     .filter(Boolean);
+}
+
+// The free address servers are often busy (429/504, or a dropped connection that Safari reports as
+// "Load failed"), so try each server in turn with a time limit.
+async function overpass(q) {
+  if (!navigator.onLine) throw new Error("No signal. Load doors when you have signal, or drop doors with +.");
+  for (const url of CONFIG.overpassUrls) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 20000);
+    try {
+      const res = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: ctl.signal });
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.elements)) return json;
+      }
+    } catch {} finally { clearTimeout(timer); }
+  }
+  throw new Error("The address servers are busy. Wait a minute and tap the house again, or drop doors with +.");
 }
 
 export async function reverseLookup(lat, lng) {
