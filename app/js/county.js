@@ -20,7 +20,8 @@ export const COUNTIES = [
   {
     key: "jackson", name: "Jackson County, MO", state: "MO",
     root: "https://jcgis.jacksongov.org/arcgis/rest/services",
-    hint: "https://jcgis.jacksongov.org/arcgis/rest/services/Cadastral/TaxParcelsTest/MapServer",
+    // the current Parcel Viewer data is hosted on the county's ArcGIS Online account
+    extraRoots: ["https://services3.arcgis.com/4LOAHoFXfea6Y3Et/ArcGIS/rest/services"],
     bbox: [38.83, -94.612, 39.22, -94.1],
     test: { lat: 39.0912, lng: -94.4155 },      // Independence
   },
@@ -70,9 +71,11 @@ function mapFields(fields) {
   return map;
 }
 const THIS_YEAR = new Date().getFullYear();
-function scoreLayer(layer, map) {
+function scoreLayer(layer, map, url = "") {
   let s = 0;
   const n = layer.name || "";
+  if (/past.?year|archive|history|backup|test/i.test(url)) s -= 8;
+  if (/pool|restroom|recreation|park|trail|bike|facilit|school|library|hydrant|sign|point of interest|poi\b|church|hospital|fire|police|address.?point/i.test(n)) s -= 12;
   if (/parcel/i.test(n)) s += 4;
   if (/tax|cadastr|real.?estate|ownership|apprais|assess(ed|ment)?\b(?!.*not)/i.test(n)) s += 2;
   if (/current|^tax ?parcels?$|^parcels?$/i.test(n.trim())) s += 2;
@@ -80,7 +83,8 @@ function scoreLayer(layer, map) {
   const years = (n.match(/\b(19|20)\d\d\b/g) || []).map(Number);
   if (years.some((y) => y < THIS_YEAR - 1)) s -= 8;
   if (/benefit|district|not assessed|land ?bank|exempt|vacant|tif|annex|zoning|plat|subdiv|easement|historic|past|history|anno|label|line|dimension|\blots?\b|condo|common|right.?of.?way|tax ?sale|delinq/i.test(n)) s -= 8;
-  if (layer.geometryType === "esriGeometryPolygon") s += 1;
+  if (layer.geometryType === "esriGeometryPolygon") s += 3;
+  else if (layer.geometryType && !/parcel/i.test(n)) s -= 4;
   if (map.owner) s += 6;
   if (map.value) s += 4;
   if (map.year) s += 1;
@@ -88,37 +92,42 @@ function scoreLayer(layer, map) {
   return s;
 }
 
-// Walks the county's services directory and returns the best parcel layer it can find.
+// Walks the county's services directories (every folder) and returns its parcel-like layers, best first.
 export async function discover(county, log = () => {}) {
-  const candidates = [];
+  const candidates = [], inventory = [];
   const svcs = [];
   if (county.hint) svcs.push(county.hint);
-  try {
-    const root = await j(county.root);
-    const folders = (root.folders || []).filter((f) => /parcel|cadastr|tax|apprais|assess|property|gispub|public|aims|ugmaps|land|real/i.test(f));
-    const add = (list) => list.filter((s) => /MapServer|FeatureServer/.test(s.type)).forEach((s) => svcs.push(`${county.root}/${s.name}/${s.type}`));
-    add(root.services || []);
-    for (const f of folders.slice(0, 8)) {
-      try { add((await j(`${county.root}/${f}`)).services || []); } catch {}
-    }
-  } catch (e) { log(`Couldn't list ${county.name} services: ${e.message}`); }
-
-  const ranked = [...new Set(svcs)]
-    .map((u) => ({ u, p: /parcel|cadastr|tax|apprais|property|ugmaps|ownership|real/i.test(u) ? 0 : 1 }))
-    .sort((a, b) => a.p - b.p).map((x) => x.u).slice(0, 24);
+  for (const root of [county.root, ...(county.extraRoots || [])]) {
+    try {
+      const top = await j(root);
+      const add = (list) => list.filter((s) => /MapServer|FeatureServer/.test(s.type)).forEach((s) => svcs.push(`${root}/${s.name}/${s.type}`));
+      add(top.services || []);
+      for (const f of (top.folders || []).slice(0, 40)) {
+        try { add((await j(`${root}/${f}`)).services || []); } catch {}
+      }
+    } catch (e) { log(`Couldn't list ${root}: ${e.message}`); }
+  }
+  const rank = (u) => (/parcel|cadastr|tax|apprais|assess|property|ugmaps|ownership|real.?estate|land.?records|aims/i.test(u) ? 0 : 1) + (/past.?year|archive|backup|history/i.test(u) ? 1 : 0);
+  // FeatureServer and MapServer copies of the same service hold the same layers; keep one
+  const seen = new Set();
+  const ranked = [...new Set(svcs)].filter((u) => { const k = u.replace(/\/(MapServer|FeatureServer)$/, ""); if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => rank(a) - rank(b)).slice(0, 45);
   for (const svc of ranked) {
     try {
       const { layers = [] } = await j(`${svc}/layers`);
       for (const layer of layers) {
         if (!layer.fields?.length) continue;
         const map = mapFields(layer.fields);
-        const score = scoreLayer(layer, map);
-        if (map.owner || map.value || map.year) candidates.push({ url: `${svc}/${layer.id}`, name: layer.name, map, score, fields: layer.fields.map((f) => f.name) });
+        const url = `${svc}/${layer.id}`;
+        inventory.push(`${url} | ${layer.name} | ${layer.geometryType || "table"} | owner=${map.owner || "-"} value=${map.value || "-"} year=${map.year || "-"}`);
+        if (!(map.owner || map.value || map.year)) continue;
+        const score = scoreLayer(layer, map, url);
+        candidates.push({ url, name: layer.name, map, score, fields: layer.fields.map((f) => f.name) });
       }
     } catch {}
   }
   candidates.sort((a, b) => b.score - a.score);
-  return candidates.length ? { layers: candidates.slice(0, 8) } : null;
+  return candidates.length ? { layers: candidates.slice(0, 8), inventory } : (inventory.length ? { layers: [], inventory } : null);
 }
 
 const EMPTY = (v) => v == null || v === "" || (Array.isArray(v) && !v.length);
