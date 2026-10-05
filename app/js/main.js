@@ -3,7 +3,7 @@ import { store } from "./store.js";
 import { sync, connection, saveConnection } from "./sync.js";
 import { addressesInView, reverseLookup, parseCsv, toCsv } from "./addresses.js";
 import { lookupProperty, propertyEnabled, money, titleCase, norm } from "./property.js";
-import { COUNTIES, discover, queryPoint, fromCounty } from "./county.js";
+import { COUNTIES, discover, queryPoint, lookupCounty } from "./county.js";
 import { cleanVin, vinStatus, decodeVin, recallsFor } from "./vehicles.js";
 
 /* ================= constants ================= */
@@ -59,8 +59,8 @@ let outboxN = 0;
 let propSettings = { regridToken: "", countyLayers: {}, onDiscover: (key, layer) => saveCountyLayers() };
 function saveCountyLayers() {
   const v = JSON.stringify(propSettings.countyLayers || {});
-  try { localStorage.setItem("knock.countyLayers", v); } catch {}
-  if (sync.enabled && sync.user) sync.setTeamSetting("county_layers", v).catch(() => {});
+  try { localStorage.setItem("knock.countyLayers2", v); } catch {}
+  if (sync.enabled && sync.user) sync.setTeamSetting("county_layers_v2", v).catch(() => {});
 }
 const lookingUp = new Set();
 const PROP_FIELDS = ["owner", "owner_occupied", "mailing_address", "home_value", "value_type", "year_built", "sqft", "last_sale_date", "last_sale_price", "parcel_id", "land_use", "prop_source", "prop_checked_at"];
@@ -902,7 +902,8 @@ $("#gate").addEventListener("click", async (e) => {
   if (g === "sync") { await sync.push(); await sync.pull(); toast("Synced"); showGate("settings"); }
   if (g === "signout") { await sync.signOut(); location.reload(); }
   if (g === "lookup-screen") { $("#gate").hidden = true; setTab("map"); lookupOnScreen(); }
-  if (g === "test-counties") testCounties();
+  if (g === "test-counties") { propSettings.countyLayers = {}; testCounties(); }
+  if (g === "copy-report") copyReport();
 });
 $("#rep-btn").addEventListener("click", () => showGate("settings"));
 $("#csv-in").addEventListener("change", async (e) => {
@@ -923,25 +924,38 @@ $("#csv-in").addEventListener("change", async (e) => {
 async function testCounties() {
   const box = $("#county-test"); if (!box) return;
   if (!navigator.onLine) { box.innerHTML = `<div class="notice err">Needs signal.</div>`; return; }
-  box.innerHTML = `<div class="notice">Checking the county parcel maps… this can take 20 seconds the first time.</div>`;
-  const rows = [];
+  box.innerHTML = `<div class="notice">Checking the county parcel maps… this can take 30 seconds the first time.</div>`;
+  const rows = [], report = {};
   for (const c of COUNTIES) {
-    let line;
     try {
-      const layer = propSettings.countyLayers?.[c.key] || await discover(c);
-      if (!layer) { rows.push(`<div class="notice err"><strong>${esc(c.name)}</strong>: couldn't reach the county map or find a parcel layer with owner names. Send this screen to Marcus.</div>`); box.innerHTML = rows.join(""); continue; }
-      propSettings.countyLayers = { ...(propSettings.countyLayers || {}), [c.key]: layer };
-      const attrs = await queryPoint(layer, c.test.lat, c.test.lng);
-      const info = attrs ? fromCounty(attrs, layer, c, titleCase, norm) : null;
-      const m = layer.map, missing = ["owner", "value", "year"].filter((k) => !m[k]);
-      line = `<div class="notice ${info?.owner ? "" : "err"}"><strong>${esc(c.name)}</strong>: ${info ? `${esc(info.owner || "no owner")} · ${info.home_value ? money(info.home_value) : "no value"} · ${info.year_built || "no year"}` : "no parcel at the test point"}<br><span class="note">Layer “${esc(layer.name)}” · owner=${esc(m.owner || "—")} value=${esc(m.value || (m.land || m.impr ? m.land + "+" + m.impr : "—"))} year=${esc(m.year || "—")}${missing.length ? ` · missing: ${missing.join(", ")}` : ""}</span></div>`;
+      const found = (propSettings.countyLayers?.[c.key]?.layers && propSettings.countyLayers[c.key]) || await discover(c);
+      if (!found) { rows.push(`<div class="notice err"><strong>${esc(c.name)}</strong>: couldn't reach the county map or find parcel layers.</div>`); box.innerHTML = rows.join(""); continue; }
+      propSettings.countyLayers = { ...(propSettings.countyLayers || {}), [c.key]: found };
+      const info = await lookupCounty(c, found, c.test.lat, c.test.lng, titleCase, norm);
+      report[c.key] = { test: c.test, result: info, layers: [] };
+      for (const l of found.layers.slice(0, 6)) {
+        let sample = null; try { sample = await queryPoint(l, c.test.lat, c.test.lng); } catch (e) { sample = { error: e.message }; }
+        report[c.key].layers.push({ name: l.name, url: l.url, score: l.score, map: l.map, fields: l.fields, sample });
+      }
+      const ok = info?.owner && info?.home_value;
+      rows.push(`<div class="notice ${ok ? "" : "err"}"><strong>${esc(c.name)}</strong>: ${info ? `${esc(info.owner || "no owner")} · ${info.home_value ? money(info.home_value) : "no value"} · ${info.year_built || "no year"}` : "no parcel at the test point"}
+        <br><span class="note">From: ${esc((info?.prop_layers || []).join(" + ") || "—")} · ${found.layers.length} layers checked</span></div>`);
     } catch (e) {
-      line = `<div class="notice err"><strong>${esc(c.name)}</strong>: ${esc(e.message)}${/fetch/i.test(e.message) ? " (the county server refused the request from this app)" : ""}</div>`;
+      rows.push(`<div class="notice err"><strong>${esc(c.name)}</strong>: ${esc(e.message)}</div>`);
     }
-    rows.push(line);
     box.innerHTML = rows.join("");
   }
+  window.__countyReport = report;
+  box.innerHTML = rows.join("") + `<button class="btn" data-g="copy-report">Copy report for Marcus</button>`;
   saveCountyLayers();
+}
+async function copyReport() {
+  const txt = JSON.stringify(window.__countyReport || {}, null, 1);
+  try { await navigator.clipboard.writeText(txt); toast("Report copied. Paste it to Marcus."); }
+  catch {
+    const ta = document.createElement("textarea"); ta.value = txt; ta.style.cssText = "width:100%;height:160px;font:11px var(--mono)";
+    $("#county-test").appendChild(ta); ta.select(); toast("Select all and copy the text box.");
+  }
 }
 
 /* ================= shell ================= */
@@ -1002,7 +1016,7 @@ async function boot() {
   (await store.allDoors()).forEach((d) => doors.set(d.id, d));
   visits = await store.allVisits();
   outboxN = await store.outboxCount();
-  try { propSettings.regridToken = localStorage.getItem("knock.regrid") || ""; propSettings.countyLayers = JSON.parse(localStorage.getItem("knock.countyLayers") || "{}"); } catch {}
+  try { propSettings.regridToken = localStorage.getItem("knock.regrid") || ""; propSettings.countyLayers = JSON.parse(localStorage.getItem("knock.countyLayers2") || "{}"); } catch {}
   initMap(); paintAll();
   const ds = [...doors.values()];
   if (ds.length && !me) map.fitBounds(L.latLngBounds(ds.map((d) => [d.lat, d.lng])).pad(0.1), { maxZoom: 17 });
@@ -1012,8 +1026,8 @@ async function boot() {
     reps = await sync.reps().catch(() => []);
     const tok = await sync.getTeamSetting("regrid_token").catch(() => null);
     if (tok != null) { propSettings.regridToken = tok; try { localStorage.setItem("knock.regrid", tok); } catch {} }
-    const layers = await sync.getTeamSetting("county_layers").catch(() => null);
-    if (layers) { try { propSettings.countyLayers = { ...JSON.parse(layers), ...propSettings.countyLayers }; localStorage.setItem("knock.countyLayers", JSON.stringify(propSettings.countyLayers)); } catch {} }
+    const layers = await sync.getTeamSetting("county_layers_v2").catch(() => null);
+    if (layers) { try { propSettings.countyLayers = { ...JSON.parse(layers), ...propSettings.countyLayers }; localStorage.setItem("knock.countyLayers2", JSON.stringify(propSettings.countyLayers)); } catch {} }
     await sync.push(); await sync.pull(); sync.live();
     setInterval(() => sync.push().then(() => sync.pull()), 60000);
   }

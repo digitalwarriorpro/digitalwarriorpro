@@ -69,11 +69,17 @@ function mapFields(fields) {
   map._dates = fields.filter((f) => f.type === "esriFieldTypeDate").map((f) => f.name);
   return map;
 }
+const THIS_YEAR = new Date().getFullYear();
 function scoreLayer(layer, map) {
   let s = 0;
-  if (/parcel/i.test(layer.name)) s += 4;
-  if (/tax|cadastr|real.?estate|ownership/i.test(layer.name)) s += 2;
-  if (/vacant|past|history|19\d\d|20[01]\d|anno|label|line|dimension|lot\b/i.test(layer.name)) s -= 5;
+  const n = layer.name || "";
+  if (/parcel/i.test(n)) s += 4;
+  if (/tax|cadastr|real.?estate|ownership|apprais|assess(ed|ment)?\b(?!.*not)/i.test(n)) s += 2;
+  if (/current|^tax ?parcels?$|^parcels?$/i.test(n.trim())) s += 2;
+  // old snapshots ("Parcels 2019") and special-purpose layers rank last
+  const years = (n.match(/\b(19|20)\d\d\b/g) || []).map(Number);
+  if (years.some((y) => y < THIS_YEAR - 1)) s -= 8;
+  if (/benefit|district|not assessed|land ?bank|exempt|vacant|tif|annex|zoning|plat|subdiv|easement|historic|past|history|anno|label|line|dimension|\blots?\b|condo|common|right.?of.?way|tax ?sale|delinq/i.test(n)) s -= 8;
   if (layer.geometryType === "esriGeometryPolygon") s += 1;
   if (map.owner) s += 6;
   if (map.value) s += 4;
@@ -99,7 +105,7 @@ export async function discover(county, log = () => {}) {
 
   const ranked = [...new Set(svcs)]
     .map((u) => ({ u, p: /parcel|cadastr|tax|apprais|property|ugmaps|ownership|real/i.test(u) ? 0 : 1 }))
-    .sort((a, b) => a.p - b.p).map((x) => x.u).slice(0, 14);
+    .sort((a, b) => a.p - b.p).map((x) => x.u).slice(0, 24);
   for (const svc of ranked) {
     try {
       const { layers = [] } = await j(`${svc}/layers`);
@@ -107,13 +113,30 @@ export async function discover(county, log = () => {}) {
         if (!layer.fields?.length) continue;
         const map = mapFields(layer.fields);
         const score = scoreLayer(layer, map);
-        if (score > 4) candidates.push({ url: `${svc}/${layer.id}`, name: layer.name, map, score });
+        if (map.owner || map.value || map.year) candidates.push({ url: `${svc}/${layer.id}`, name: layer.name, map, score, fields: layer.fields.map((f) => f.name) });
       }
     } catch {}
-    if (candidates.some((c) => c.map.owner && c.map.value)) break;
   }
   candidates.sort((a, b) => b.score - a.score);
-  return candidates[0] || null;
+  return candidates.length ? { layers: candidates.slice(0, 8) } : null;
+}
+
+const EMPTY = (v) => v == null || v === "" || (Array.isArray(v) && !v.length);
+// Queries the best-ranked layers at a point and fills owner / value / year from whichever has them.
+export async function lookupCounty(county, found, lat, lng, titleCase, norm) {
+  const merged = {}, used = [];
+  for (const layer of found.layers.filter((l) => l.score > 0).slice(0, 4)) {
+    let attrs = null;
+    try { attrs = await queryPoint(layer, lat, lng); } catch { continue; }
+    if (!attrs) continue;
+    const info = fromCounty(attrs, layer, county, titleCase, norm);
+    let added = false;
+    for (const [k, v] of Object.entries(info)) if (EMPTY(merged[k]) && !EMPTY(v)) { merged[k] = v; if (!/^prop_|value_type/.test(k)) added = true; }
+    if (added) used.push(layer.name);
+    if (merged.owner && merged.home_value && merged.year_built) break;
+  }
+  if (!used.length) return null;
+  return { ...merged, prop_source: county.name, prop_layers: used };
 }
 
 const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[$,]/g, "")); return isFinite(n) && n > 0 ? n : null; };

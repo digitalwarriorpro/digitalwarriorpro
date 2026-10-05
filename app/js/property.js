@@ -3,7 +3,7 @@
 // 2. Optional fallback for anywhere else: Regrid (paid nationwide parcel API).
 // A lookup runs once per door; the result is saved on the door and shared with the team.
 import { CONFIG } from "./config.js";
-import { countyFor, discover, queryPoint, fromCounty } from "./county.js";
+import { countyFor, discover, lookupCounty } from "./county.js";
 
 const pick = (o, ...keys) => { for (const k of keys) { const v = o?.[k]; if (v != null && v !== "") return v; } return null; };
 const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[$,]/g, "")); return isFinite(n) && n > 0 ? n : null; };
@@ -16,15 +16,15 @@ export function propertyEnabled(settings) { return CONFIG.countyRecords !== fals
 export async function lookupProperty(lat, lng, settings) {
   if (CONFIG.countyRecords !== false) {
     for (const county of countyFor(lat, lng)) {
-      let layer = settings.countyLayers?.[county.key];
-      if (!layer) {
-        layer = await discover(county);
-        if (!layer) continue;
-        settings.countyLayers = { ...(settings.countyLayers || {}), [county.key]: layer };
-        settings.onDiscover?.(county.key, layer);
+      let found = settings.countyLayers?.[county.key];
+      if (!found?.layers) {
+        found = await discover(county);
+        if (!found) continue;
+        settings.countyLayers = { ...(settings.countyLayers || {}), [county.key]: found };
+        settings.onDiscover?.(county.key, found);
       }
-      const attrs = await queryPoint(layer, lat, lng);
-      if (attrs) return fromCounty(attrs, layer, county, titleCase, norm);
+      const info = await lookupCounty(county, found, lat, lng, titleCase, norm);
+      if (info) { delete info.prop_layers; return info; }
     }
   }
   if (settings.regridToken) return lookupRegrid(lat, lng, settings);
