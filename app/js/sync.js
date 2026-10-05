@@ -40,7 +40,9 @@ export const sync = {
   async init() {
     const c = connection();
     if (!c.configured || !window.supabase) return false;
-    sb = window.supabase.createClient(c.url, c.key, { auth: { persistSession: true, autoRefreshToken: true } });
+    // lock: the default navigator.locks lock can hang forever in iPhone home-screen apps, which stalls
+    // every request; the app runs in a single window, so token refreshes don't need a cross-tab lock.
+    sb = window.supabase.createClient(c.url, c.key, { auth: { persistSession: true, autoRefreshToken: true, lock: (_name, _timeout, fn) => fn() } });
     const { data } = await sb.auth.getSession();
     user = data.session?.user || null;
     sb.auth.onAuthStateChange((_e, s) => { user = s?.user || null; });
@@ -76,9 +78,11 @@ export const sync = {
   profileError: null,
   async saveProfile(name, ms = 10000) {
     const row = { id: user.id, name, email: user.email };
-    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+    const ctl = new AbortController(); let t;
+    // The limit covers the whole call (the client fetches a token before the request), not just the fetch
+    const timeout = new Promise((_, rej) => { t = setTimeout(() => { ctl.abort(); rej(new Error("timeout")); }, ms); });
     try {
-      const { data, error } = await sb.from("reps").upsert(row).select().abortSignal(ctl.signal).single();
+      const { data, error } = await Promise.race([sb.from("reps").upsert(row).select().abortSignal(ctl.signal).single(), timeout]);
       if (error) throw error;
       profile = data; this.profileError = null;
       return profile;

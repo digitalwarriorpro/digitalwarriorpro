@@ -3,7 +3,7 @@
 // limits every table to signed-in reps.
 export const CONFIG = {
   // Shown on the sign-in, name and settings screens; keep in step with VERSION in sw.js
-  appVersion: "17",
+  appVersion: "18",
   // Supabase project (Project Settings → API). Leave blank to run in single-phone mode.
   supabaseUrl: "https://dwkayufjpthvovchvsta.supabase.co",
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3a2F5dWZqcHRodm92Y2h2c3RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3MTIwOTksImV4cCI6MjEwNjI4ODA5OX0.Vd596wo3PnPc14kqQCAK_h0EKh1jqUOVaR757xFeoA0",
