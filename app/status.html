@@ -59,14 +59,23 @@ async function run() {
   if (!url || !key) return;
 
   const h = { apikey: key, Authorization: `Bearer ${key}` };
+  // Signed in: check tables the way the app uses them. Signed out: the database should refuse.
+  const asUser = !!session?.access_token && (session.expires_at || 0) * 1000 > Date.now();
+  const th = asUser ? { apikey: key, Authorization: `Bearer ${session.access_token}` } : h;
+  row("Table checks run as", asUser ? ok(`signed-in rep (${session.user.email})`) : warn("signed-out visitor: open this page from inside the app (Version link on the sign-in or settings screen) to test as a rep"));
   const health = await timed(`${url}/auth/v1/health`, { headers: h });
   row("Supabase sign-in service", health.res?.ok ? ok(`up (${health.ms} ms)`) : bad(health.err || `HTTP ${health.res.status}`));
   for (const t of ["reps", "doors", "visits", "app_settings"]) {
-    const r = await timed(`${url}/rest/v1/${t}?select=*&limit=1`, { headers: h });
+    const r = await timed(`${url}/rest/v1/${t}?select=*&limit=1`, { headers: th });
     let msg;
     if (r.err) msg = bad(r.err);
-    else if (r.res.ok) msg = ok(`table exists (${r.ms} ms)`);
-    else { const body = await r.res.text().catch(() => ""); msg = /PGRST205|42P01|does not exist|Could not find the table/i.test(body) ? bad("table missing: run schema.sql") : bad(`HTTP ${r.res.status} ${body.slice(0, 120)}`); }
+    else if (r.res.ok) msg = asUser ? ok(`rep has access (${r.ms} ms)`) : ok(`exists (${r.ms} ms)`);
+    else {
+      const body = await r.res.text().catch(() => "");
+      if (/PGRST205|42P01|does not exist|Could not find the table/i.test(body)) msg = bad("table missing: run reset_and_setup.sql");
+      else if (/42501/.test(body)) msg = asUser ? bad("rep is refused: run reset_and_setup.sql") : ok("exists, locked to signed-in reps (correct)");
+      else msg = bad(`HTTP ${r.res.status} ${body.slice(0, 120)}`);
+    }
     row(`Table: ${t}`, msg);
   }
   if (session?.access_token) {
