@@ -1041,7 +1041,34 @@ async function boot() {
   }
   setInterval(renderShift, 30000);
 }
+// Install banner: phones opened in the browser get told how to add the app to the home screen.
+// On iPhone the installed app keeps its own storage, separate from Safari, so install before knocking.
+let installEvt = null;
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; renderInstall(); });
+window.addEventListener("appinstalled", () => { installEvt = null; renderInstall(); });
+function renderInstall() {
+  const el = $("#install");
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const android = /Android/.test(ua);
+  let hide = false; try { hide = localStorage.getItem("knock.installHide") === "1"; } catch {}
+  if (standalone || hide || !(ios || android || installEvt)) { el.hidden = true; return; }
+  const share = `<svg class="share" width="15" height="17" viewBox="0 0 15 17" fill="none" stroke="currentColor" stroke-width="1.6" aria-label="Share"><path d="M7.5 1v10M4 4.5 7.5 1 11 4.5M3 7.5H1.5v8h12v-8H12"/></svg>`;
+  const how = installEvt ? "Install the app on this phone so it opens full screen and works with no signal."
+    : ios ? `<strong>Install the app:</strong> tap Share ${share} at the bottom of Safari, then <strong>Add to Home Screen</strong>. Do it before you start knocking.`
+    : `<strong>Install the app:</strong> tap <strong>⋮</strong> in Chrome, then <strong>Install app</strong> (or <strong>Add to Home screen</strong>).`;
+  el.innerHTML = `<p>${how}</p>${installEvt ? `<button class="btn" data-i="go">Install</button>` : ""}<button class="x" data-i="hide" aria-label="Hide">×</button>`;
+  el.hidden = false;
+}
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-i]"); if (!b) return;
+  if (b.dataset.i === "go" && installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; }
+  if (b.dataset.i === "hide") { try { localStorage.setItem("knock.installHide", "1"); } catch {} }
+  renderInstall();
+});
 (async function start() {
+  renderInstall();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   try { navigator.storage?.persist?.(); } catch {}
   const live = await sync.init();
