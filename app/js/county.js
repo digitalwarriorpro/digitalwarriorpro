@@ -7,12 +7,20 @@ export const COUNTIES = [
   {
     key: "johnson", name: "Johnson County, KS", state: "KS",
     root: "https://maps.jocogov.org/arcgis/rest/services",
+    // The countywide property map isn't public; these city parcel maps are (owner, value, year built).
+    pinned: [
+      "https://maps.jocogov.org/arcgis/rest/services/PrairieVillage/Parcels/MapServer/0",
+      "https://maps.jocogov.org/arcgis/rest/services/Mission/Mission_Permitting/FeatureServer/55",
+      "https://maps.jocogov.org/arcgis/rest/services/SpringHill/OpenGov/MapServer/0",
+    ],
     bbox: [38.73, -95.06, 39.06, -94.6],       // south, west, north, east
-    test: { lat: 38.9590, lng: -94.6700 },      // Overland Park
+    test: { lat: 38.9800, lng: -94.6330 },      // Prairie Village
   },
   {
     key: "wyandotte", name: "Wyandotte County, KS", state: "KS",
     root: "https://gisweb.wycokck.org/arcgis/rest/services",
+    // owner, address, land use; Wyandotte publishes no values or year built
+    pinned: ["https://gisweb.wycokck.org/arcgis/rest/services/GISPUB/UGMAPS_4_V02/MapServer/0"],
     hint: "https://gisweb.wycokck.org/arcgis/rest/services/GISPUB/UGMAPS_4_V02/MapServer",
     bbox: [39.03, -94.91, 39.2, -94.588],
     test: { lat: 39.1125, lng: -94.7000 },      // Kansas City, KS
@@ -22,6 +30,12 @@ export const COUNTIES = [
     root: "https://jcgis.jacksongov.org/arcgis/rest/services",
     // the current Parcel Viewer data is hosted on the county's ArcGIS Online account
     extraRoots: ["https://services3.arcgis.com/4LOAHoFXfea6Y3Et/ArcGIS/rest/services"],
+    pinned: [
+      // current tax roll: owner, owner mailing address, market value, land use
+      "https://services3.arcgis.com/4LOAHoFXfea6Y3Et/ArcGIS/rest/services/Parcel_Information/FeatureServer/1",
+      // year built, living area, bedrooms
+      "https://services3.arcgis.com/4LOAHoFXfea6Y3Et/ArcGIS/rest/services/Parcels_Market_Value/FeatureServer/0",
+    ],
     bbox: [38.83, -94.612, 39.22, -94.1],
     test: { lat: 39.0912, lng: -94.4155 },      // Independence
   },
@@ -33,12 +47,15 @@ const FIELD_RULES = {
   mail:    [/(mail|own(er)?).?(addr|add|adr|street|line1)/i, /^mail/i],
   mailCity:[/(mail|own(er)?).?(city|cty)/i],
   mailState:[/(mail|own(er)?).?(state|st)$/i],
-  situs:   [/situs|site.?add|prop(erty)?.?add|^address$|^addr$|full.?add/i],
+  situs:   [/situs|site.?add|prop(erty)?.?add|parcel.?add|^address$|^addr$|full.?add/i],
   value:   [/(mkt|market).?(val|tot)|(tot|total).?(mkt|market)/i, /apprais.*(tot|val)|(tot|total).?apprais/i, /(tot|total).?(val|value)$/i, /^appr/i, /^(total|tot)_?val/i, /assess.*tot|tot.*assess/i],
   land:    [/land.?(val|mkt|appr)/i],
   impr:    [/(impr|bldg|building).?(val|mkt|appr)/i],
   year:    [/(yr|year).?(blt|built|bui)/i, /^yrblt$/i, /eff.?yr/i],
-  sqft:    [/(liv|living|bldg|building|fin|heated).?(area|sq|sf)/i, /^sq.?ft/i, /^sqft/i, /gla$/i],
+  sqft:    [/tot_sqf_l_area|sqf.?l.?area/i, /(liv|living|bldg|building|fin|heated).?(area|sq|sf)/i, /^sq.?ft/i, /^sqft/i, /gla$/i],
+  beds:    [/bedroom/i, /^beds?$/i],
+  landUse: [/luc_desc|land.?use.?(desc|cd_descr)|^land_use$|use.?desc/i],
+  hide:    [/^hidename$/i],
   saleDate:[/(sale|deed|sold).?(dt|date)/i],
   salePrice:[/(sale|sold).?(pr|price|amt|amount|val)/i],
   parcel:  [/^(parcel|parcel_?id|parcelid|parcel_?num|pin|kup|apn|parcel_number|parcelno)$/i, /parcel/i],
@@ -63,7 +80,7 @@ function mapFields(fields) {
   const used = new Set(), map = {};
   for (const [k, rules] of Object.entries(FIELD_RULES)) {
     for (const r of rules) {
-      const hit = names.find((n) => r.test(n) && !used.has(n));
+      const hit = names.find((n) => r.test(n) && !used.has(n) && !(k === "mail" && /name/i.test(n)));
       if (hit) { map[k] = hit; used.add(hit); break; }
     }
   }
@@ -93,7 +110,19 @@ function scoreLayer(layer, map, url = "") {
 }
 
 // Walks the county's services directories (every folder) and returns its parcel-like layers, best first.
+async function loadPinned(county) {
+  const layers = [];
+  for (const [i, url] of county.pinned.entries()) {
+    try {
+      const meta = await j(url);
+      layers.push({ url, name: meta.name, map: mapFields(meta.fields || []), score: 100 - i, pinned: true });
+    } catch {}
+  }
+  return layers.length ? { layers } : null;
+}
+
 export async function discover(county, log = () => {}) {
+  if (county.pinned?.length) { const p = await loadPinned(county); if (p) return p; }
   const candidates = [], inventory = [];
   const svcs = [];
   if (county.hint) svcs.push(county.hint);
@@ -159,13 +188,15 @@ export async function queryPoint(layer, lat, lng) {
 export function fromCounty(attrs, layer, county, titleCase, norm) {
   const m = layer.map, g = (k) => { const v = m[k] ? attrs[m[k]] : null; return v == null || v === "" || v === " " ? null : v; };
   const date = (k) => { const v = g(k); if (v == null) return ""; if (typeof v === "number" && v > 1e10) return new Date(v).toISOString().slice(0, 10); return String(v); };
-  const owner = [g("owner"), g("owner2")].filter(Boolean).map((s) => String(s).trim()).join(" & ");
-  const mail = g("mail") ? String(g("mail")).trim() : "";
+  const clean = (s) => String(s).replace(/\s+/g, " ").replace(/(\s*,\s*)+$/g, "").replace(/(\s*,\s*){2,}/g, ", ").trim();
+  const hidden = /^(y|yes|true|1)$/i.test(String(g("hide") || "").trim());
+  const owner = hidden ? "" : [g("owner"), g("owner2")].filter(Boolean).map(clean).filter(Boolean).join(" & ");
+  const mail = g("mail") ? String(g("mail")).replace(/\s+/g, " ").trim() : "";
   const situs = g("situs") ? String(g("situs")).trim() : "";
   const hs = g("homestead");
   let occupied = null;
   if (hs != null) occupied = /^(y|yes|true|1|h)$/i.test(String(hs).trim());
-  else if (mail && situs) occupied = norm(mail).startsWith(norm(situs)) || norm(situs).startsWith(norm(mail));
+  else if (mail && situs) occupied = sameStreet(mail, situs, norm);
   const land = num(g("land")), impr = num(g("impr"));
   const value = num(g("value")) || (land || impr ? (land || 0) + (impr || 0) : null);
   const yr = num(g("year"));
@@ -180,8 +211,17 @@ export function fromCounty(attrs, layer, county, titleCase, norm) {
     last_sale_date: date("saleDate"),
     last_sale_price: num(g("salePrice")),
     parcel_id: g("parcel") ? String(g("parcel")) : "",
-    land_use: "",
+    land_use: g("landUse") ? titleCase(String(g("landUse")).trim()) : "",
+    beds: num(g("beds")) ? Math.round(num(g("beds"))) : null,
+    owner_hidden: hidden || undefined,
     prop_source: county.name,
     prop_checked_at: new Date().toISOString(),
   };
+}
+
+// "7605  BRECKENRIDGE AVE  KANSAS CITY, MO" vs "125 S MAIN ST": same house number and first street word
+function sameStreet(a, b, norm) {
+  const parts = (x) => norm(String(x).split(/\s{2,}|,/)[0]).split(" ").filter(Boolean);
+  const pa = parts(a), pb = parts(b);
+  return pa.length > 1 && pb.length > 1 && pa[0] === pb[0] && pa[1] === pb[1];
 }

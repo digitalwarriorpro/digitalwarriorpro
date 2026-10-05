@@ -59,8 +59,8 @@ let outboxN = 0;
 let propSettings = { regridToken: "", countyLayers: {}, onDiscover: (key, layer) => saveCountyLayers() };
 function saveCountyLayers() {
   const v = JSON.stringify(propSettings.countyLayers || {});
-  try { localStorage.setItem("knock.countyLayers3", v); } catch {}
-  if (sync.enabled && sync.user) sync.setTeamSetting("county_layers_v3", v).catch(() => {});
+  try { localStorage.setItem("knock.countyLayers4", v); } catch {}
+  if (sync.enabled && sync.user) sync.setTeamSetting("county_layers_v4", v).catch(() => {});
 }
 const lookingUp = new Set();
 const PROP_FIELDS = ["owner", "owner_occupied", "mailing_address", "home_value", "value_type", "year_built", "sqft", "last_sale_date", "last_sale_price", "parcel_id", "land_use", "prop_source", "prop_checked_at"];
@@ -298,12 +298,14 @@ function homeInfo(d) {
     d.home_value ? `<div><b>${money(d.home_value)}</b><span>${esc(d.value_type || "Value")}</span></div>` : "",
     d.year_built ? `<div><b>${d.year_built}</b><span>Built</span></div>` : "",
     d.sqft ? `<div><b>${Number(d.sqft).toLocaleString()}</b><span>Sq ft</span></div>` : "",
+    d.beds ? `<div><b>${d.beds}</b><span>Bedrooms</span></div>` : "",
     d.last_sale_price || d.last_sale_date ? `<div><b>${d.last_sale_price ? money(d.last_sale_price) : "—"}</b><span>Sold ${esc(fmtSale(d.last_sale_date))}</span></div>` : "",
   ].filter(Boolean).join("");
   const occ = d.owner_occupied === true ? `<span class="fact hot">Owner lives here</span>` : d.owner_occupied === false ? `<span class="fact">Owner lives elsewhere · likely a rental</span>` : "";
   return `<div class="home">
     <div class="label">Homeowner</div>
-    <div class="owner">${esc(d.owner || "Owner not listed")}</div>
+    <div class="owner">${esc(d.owner || (d.owner_hidden ? "Name withheld by the county" : "Owner not listed"))}</div>
+    ${d.land_use ? `<p class="note">${esc(d.land_use)}</p>` : ""}
     ${occ ? `<div class="facts">${occ}</div>` : ""}
     ${d.owner_occupied === false && d.mailing_address ? `<p class="note">Owner mail goes to ${esc(d.mailing_address)}</p>` : ""}
     ${stats ? `<div class="stats">${stats}</div>` : ""}
@@ -926,22 +928,26 @@ async function testCounties() {
   if (!navigator.onLine) { box.innerHTML = `<div class="notice err">Needs signal.</div>`; return; }
   box.innerHTML = `<div class="notice">Checking the county parcel maps… this can take 30 seconds the first time.</div>`;
   const rows = [], report = {};
-  for (const c of COUNTIES) {
+  const here = me || (map && { lat: map.getCenter().lat, lng: map.getCenter().lng });
+  const tests = COUNTIES.map((c) => ({ c, pt: c.test, label: c.name }));
+  if (here) { const c = COUNTIES.find((x) => { const [s0, w, n, e] = x.bbox; return here.lat >= s0 && here.lat <= n && here.lng >= w && here.lng <= e; }); if (c) tests.unshift({ c, pt: here, label: `Where you are (${c.name})` }); }
+  for (const { c, pt, label } of tests) {
     try {
       const found = (propSettings.countyLayers?.[c.key]?.layers && propSettings.countyLayers[c.key]) || await discover(c);
-      if (!found) { rows.push(`<div class="notice err"><strong>${esc(c.name)}</strong>: couldn't reach the county map or find parcel layers.</div>`); box.innerHTML = rows.join(""); continue; }
+      if (!found) { rows.push(`<div class="notice err"><strong>${esc(label)}</strong>: couldn't reach the county map or find parcel layers.</div>`); box.innerHTML = rows.join(""); continue; }
       propSettings.countyLayers = { ...(propSettings.countyLayers || {}), [c.key]: found };
-      const info = await lookupCounty(c, found, c.test.lat, c.test.lng, titleCase, norm);
-      report[c.key] = { test: c.test, result: info, picked: [], inventory: found.inventory || [] };
+      const info = await lookupCounty(c, found, pt.lat, pt.lng, titleCase, norm);
+      const rk = label === c.name ? c.key : "here";
+      report[rk] = { test: pt, result: info, picked: [], inventory: (found.inventory || []).slice(0, 80) };
       for (const l of found.layers.slice(0, 4)) {
-        let sample = null; try { sample = await queryPoint(l, c.test.lat, c.test.lng); } catch (e) { sample = { error: e.message }; }
-        report[c.key].picked.push({ name: l.name, url: l.url, score: l.score, map: l.map, sample: sample && Object.fromEntries(Object.entries(sample).filter(([, v]) => v != null && v !== "" && String(v).trim() !== "")) });
+        let sample = null; try { sample = await queryPoint(l, pt.lat, pt.lng); } catch (e) { sample = { error: e.message }; }
+        report[rk].picked.push({ name: l.name, url: l.url, score: l.score, map: l.map, sample: sample && Object.fromEntries(Object.entries(sample).filter(([, v]) => v != null && v !== "" && String(v).trim() !== "")) });
       }
       const ok = info?.owner && info?.home_value;
-      rows.push(`<div class="notice ${ok ? "" : "err"}"><strong>${esc(c.name)}</strong>: ${info ? `${esc(info.owner || "no owner")} · ${info.home_value ? money(info.home_value) : "no value"} · ${info.year_built || "no year"}` : "no parcel at the test point"}
+      rows.push(`<div class="notice ${ok ? "" : "err"}"><strong>${esc(label)}</strong>: ${info ? `${esc(info.owner || "no owner")} · ${info.home_value ? money(info.home_value) : "no value"} · ${info.year_built || "no year"}` : "no parcel at the test point"}
         <br><span class="note">From: ${esc((info?.prop_layers || []).join(" + ") || "—")} · ${found.layers.length} layers checked</span></div>`);
     } catch (e) {
-      rows.push(`<div class="notice err"><strong>${esc(c.name)}</strong>: ${esc(e.message)}</div>`);
+      rows.push(`<div class="notice err"><strong>${esc(label)}</strong>: ${esc(e.message)}</div>`);
     }
     box.innerHTML = rows.join("");
   }
@@ -1016,7 +1022,7 @@ async function boot() {
   (await store.allDoors()).forEach((d) => doors.set(d.id, d));
   visits = await store.allVisits();
   outboxN = await store.outboxCount();
-  try { propSettings.regridToken = localStorage.getItem("knock.regrid") || ""; propSettings.countyLayers = JSON.parse(localStorage.getItem("knock.countyLayers3") || "{}"); } catch {}
+  try { propSettings.regridToken = localStorage.getItem("knock.regrid") || ""; propSettings.countyLayers = JSON.parse(localStorage.getItem("knock.countyLayers4") || "{}"); } catch {}
   initMap(); paintAll();
   const ds = [...doors.values()];
   if (ds.length && !me) map.fitBounds(L.latLngBounds(ds.map((d) => [d.lat, d.lng])).pad(0.1), { maxZoom: 17 });
@@ -1026,8 +1032,8 @@ async function boot() {
     reps = await sync.reps().catch(() => []);
     const tok = await sync.getTeamSetting("regrid_token").catch(() => null);
     if (tok != null) { propSettings.regridToken = tok; try { localStorage.setItem("knock.regrid", tok); } catch {} }
-    const layers = await sync.getTeamSetting("county_layers_v3").catch(() => null);
-    if (layers) { try { propSettings.countyLayers = { ...JSON.parse(layers), ...propSettings.countyLayers }; localStorage.setItem("knock.countyLayers3", JSON.stringify(propSettings.countyLayers)); } catch {} }
+    const layers = await sync.getTeamSetting("county_layers_v4").catch(() => null);
+    if (layers) { try { propSettings.countyLayers = { ...JSON.parse(layers), ...propSettings.countyLayers }; localStorage.setItem("knock.countyLayers4", JSON.stringify(propSettings.countyLayers)); } catch {} }
     await sync.push(); await sync.pull(); sync.live();
     setInterval(() => sync.push().then(() => sync.pull()), 60000);
   }

@@ -132,3 +132,7 @@ create policy app_settings_all on public.app_settings for all to authenticated u
 
 -- Cars seen from the street before knocking: {count, types[], at, by}
 alter table public.doors add column if not exists driveway jsonb;
+
+-- County record extras
+alter table public.doors add column if not exists beds int;
+alter table public.doors add column if not exists owner_hidden boolean;
