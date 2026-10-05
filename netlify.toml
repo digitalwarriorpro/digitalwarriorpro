@@ -1,0 +1,14 @@
+# Netlify deploys the Knock app straight from this repo: no build step, the app folder is the site.
+[build]
+  publish = "app"
+  command = ""
+
+# Always fetch the newest app files and service worker, so phones pick up updates on next open
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
