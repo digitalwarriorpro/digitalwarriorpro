@@ -1,3 +1,15 @@
+-- Dano's Dents Knock: clean rebuild of the app's tables, then full setup.
+-- Use when saves are refused or the tables came from an older script.
+-- WARNING: deletes everything in reps, doors, visits and app_settings (sign-in accounts are kept).
+-- Supabase → SQL Editor → New query → paste all of this → Run.
+
+drop table if exists public.visits cascade;
+drop table if exists public.doors cascade;
+drop table if exists public.app_settings cascade;
+drop table if exists public.reps cascade;
+drop function if exists public.is_rep() cascade;
+drop function if exists public.touch_updated_at() cascade;
+
 -- Dano's Dents Knock: team database.
 -- Run once in Supabase → SQL Editor → New query → paste → Run. Safe to re-run.
 
