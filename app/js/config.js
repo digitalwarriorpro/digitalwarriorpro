@@ -3,7 +3,7 @@
 // limits every table to signed-in reps.
 export const CONFIG = {
   // Supabase project (Project Settings → API). Leave blank to run in single-phone mode.
-  supabaseUrl: "",
+  supabaseUrl: "https://dwkayufjpthvovchvsta.supabase.co",
   supabaseAnonKey: "",
 
   company: "Dano's Dents",
