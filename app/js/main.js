@@ -2,7 +2,8 @@ import { CONFIG } from "./config.js";
 import { store } from "./store.js";
 import { sync, connection, saveConnection } from "./sync.js";
 import { addressesInView, reverseLookup, parseCsv, toCsv } from "./addresses.js";
-import { lookupProperty, propertyEnabled, money } from "./property.js";
+import { lookupProperty, propertyEnabled, money, titleCase, norm } from "./property.js";
+import { COUNTIES, discover, queryPoint, fromCounty } from "./county.js";
 
 /* ================= constants ================= */
 const S = {
@@ -52,7 +53,12 @@ let undo = null, lastSaved = null;
 let reps = [];
 const photoUrls = new Map();
 let outboxN = 0;
-let propSettings = { regridToken: "" };
+let propSettings = { regridToken: "", countyLayers: {}, onDiscover: (key, layer) => saveCountyLayers() };
+function saveCountyLayers() {
+  const v = JSON.stringify(propSettings.countyLayers || {});
+  try { localStorage.setItem("knock.countyLayers", v); } catch {}
+  if (sync.enabled && sync.user) sync.setTeamSetting("county_layers", v).catch(() => {});
+}
 const lookingUp = new Set();
 const PROP_FIELDS = ["owner", "owner_occupied", "mailing_address", "home_value", "value_type", "year_built", "sqft", "last_sale_date", "last_sale_price", "parcel_id", "land_use", "prop_source", "prop_checked_at"];
 
@@ -278,7 +284,7 @@ function homeInfo(d) {
   if (lookingUp.has(d.id)) return `<div class="home"><div class="label">Homeowner</div><p class="note">Looking up county records…</p></div>`;
   if (!d.prop_checked_at) {
     return propertyEnabled(propSettings)
-      ? `<div class="home"><div class="label">Homeowner</div><button class="btn" data-a="lookup">Look up owner and home value</button></div>`
+      ? `<div class="home"><div class="label">Homeowner</div><button class="btn" data-a="lookup">Look up owner and home value</button><p class="note">Free for Johnson, Wyandotte and Jackson counties.</p></div>`
       : "";
   }
   if (!d.owner && !d.home_value && !d.year_built) return `<div class="home"><div class="label">Homeowner</div><p class="note">No county record found for this spot.${propertyEnabled(propSettings) ? ` <button class="btn link" style="padding:0" data-a="lookup">Try again</button>` : ""}</p></div>`;
@@ -295,7 +301,7 @@ function homeInfo(d) {
     ${occ ? `<div class="facts">${occ}</div>` : ""}
     ${d.owner_occupied === false && d.mailing_address ? `<p class="note">Owner mail goes to ${esc(d.mailing_address)}</p>` : ""}
     ${stats ? `<div class="stats">${stats}</div>` : ""}
-    <p class="note">County records via ${esc(d.prop_source || "import")}${d.prop_checked_at ? `, checked ${esc(new Date(d.prop_checked_at).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" }))}` : ""}. Whoever answers may not be the owner.</p>
+    <p class="note">${esc(/County,/.test(d.prop_source) ? `${d.prop_source} records` : `County records via ${d.prop_source || "import"}`)}${d.prop_checked_at ? `, checked ${esc(new Date(d.prop_checked_at).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" }))}` : ""}. Whoever answers may not be the owner.</p>
   </div>`;
 }
 const fmtSale = (s) => { if (!s) return ""; const d = new Date(s); return isNaN(d) ? String(s) : d.toLocaleDateString("en-US", { month: "numeric", year: "numeric" }); };
@@ -305,6 +311,7 @@ async function lookupDoor(d, quiet) {
   if (sel?.id === d.id && sheet === "peek") renderSheet();
   try {
     const info = await lookupProperty(d.lat, d.lng, propSettings);
+    if (!info) { if (!quiet) toast("No free county records here. Add a Regrid key in Settings to cover other counties."); return false; }
     const cur = doors.get(d.id) || d;
     Object.assign(cur, info);
     await saveDoor(cur);
@@ -781,9 +788,11 @@ function showGate(kind, msg) {
       <div class="row">${sync.enabled && sync.user ? `<button class="btn" data-g="sync">Sync now</button><button class="btn danger" data-g="signout">Sign out</button>` : ""}</div>
       ${connForm(c)}</section>
     <section><div class="label">Homeowner and home value lookups</div>
-      <p class="note">Owner names, home values, year built and last sale come from county records through Regrid (regrid.com, paid API). Each house is looked up once and shared with the team.</p>
-      <form id="f-prop" class="field"><label for="g-regrid">Regrid API token</label><input type="text" id="g-regrid" value="${esc(propSettings.regridToken)}" autocomplete="off" placeholder="Paste token"><button class="btn" style="margin-top:8px">Save${sync.enabled && sync.user ? " for the whole team" : " on this phone"}</button></form>
-      ${propertyEnabled(propSettings) ? `<button class="btn" data-g="lookup-screen">Look up owners for doors on the map screen</button>` : ""}</section>
+      <p class="note">Free from the county parcel maps for <strong>Johnson County KS, Wyandotte County KS and Jackson County MO</strong>. Opening a door looks it up once and shares the result with the team.</p>
+      <div class="row"><button class="btn" data-g="test-counties">Test county records</button>${propertyEnabled(propSettings) ? `<button class="btn" data-g="lookup-screen">Look up doors on screen</button>` : ""}</div>
+      <div id="county-test"></div>
+      <details><summary class="note" style="cursor:pointer">Other counties (Clay, Platte, Cass…): Regrid paid API</summary>
+      <form id="f-prop" class="field" style="margin-top:8px"><label for="g-regrid">Regrid API token (optional)</label><input type="text" id="g-regrid" value="${esc(propSettings.regridToken)}" autocomplete="off" placeholder="Paste token"><button class="btn" style="margin-top:8px">Save${sync.enabled && sync.user ? " for the whole team" : " on this phone"}</button></form></details></section>
     <section><div class="label">Add doors from a list</div>
       <p class="note">CSV with columns address, lat, lng. Optional: owner, mailing address, home value, year built, sqft, sale date, sale price, parcel, plus city, zip, name, phone, notes. Works with county parcel exports and Hail Recon lists.</p>
       <label class="btn" for="csv-in">Choose CSV file</label></section>
@@ -838,6 +847,7 @@ $("#gate").addEventListener("click", async (e) => {
   if (g === "sync") { await sync.push(); await sync.pull(); toast("Synced"); showGate("settings"); }
   if (g === "signout") { await sync.signOut(); location.reload(); }
   if (g === "lookup-screen") { $("#gate").hidden = true; setTab("map"); lookupOnScreen(); }
+  if (g === "test-counties") testCounties();
 });
 $("#rep-btn").addEventListener("click", () => showGate("settings"));
 $("#csv-in").addEventListener("change", async (e) => {
@@ -852,6 +862,32 @@ $("#csv-in").addEventListener("change", async (e) => {
     renderAll();
   } catch (err) { toast(err.message); }
 });
+
+// Runs the county lookups end to end on one known house per county and shows what came back,
+// so the setup can be checked from a phone.
+async function testCounties() {
+  const box = $("#county-test"); if (!box) return;
+  if (!navigator.onLine) { box.innerHTML = `<div class="notice err">Needs signal.</div>`; return; }
+  box.innerHTML = `<div class="notice">Checking the county parcel maps… this can take 20 seconds the first time.</div>`;
+  const rows = [];
+  for (const c of COUNTIES) {
+    let line;
+    try {
+      const layer = propSettings.countyLayers?.[c.key] || await discover(c);
+      if (!layer) { rows.push(`<div class="notice err"><strong>${esc(c.name)}</strong>: couldn't reach the county map or find a parcel layer with owner names. Send this screen to Marcus.</div>`); box.innerHTML = rows.join(""); continue; }
+      propSettings.countyLayers = { ...(propSettings.countyLayers || {}), [c.key]: layer };
+      const attrs = await queryPoint(layer, c.test.lat, c.test.lng);
+      const info = attrs ? fromCounty(attrs, layer, c, titleCase, norm) : null;
+      const m = layer.map, missing = ["owner", "value", "year"].filter((k) => !m[k]);
+      line = `<div class="notice ${info?.owner ? "" : "err"}"><strong>${esc(c.name)}</strong>: ${info ? `${esc(info.owner || "no owner")} · ${info.home_value ? money(info.home_value) : "no value"} · ${info.year_built || "no year"}` : "no parcel at the test point"}<br><span class="note">Layer “${esc(layer.name)}” · owner=${esc(m.owner || "—")} value=${esc(m.value || (m.land || m.impr ? m.land + "+" + m.impr : "—"))} year=${esc(m.year || "—")}${missing.length ? ` · missing: ${missing.join(", ")}` : ""}</span></div>`;
+    } catch (e) {
+      line = `<div class="notice err"><strong>${esc(c.name)}</strong>: ${esc(e.message)}${/fetch/i.test(e.message) ? " (the county server refused the request from this app)" : ""}</div>`;
+    }
+    rows.push(line);
+    box.innerHTML = rows.join("");
+  }
+  saveCountyLayers();
+}
 
 /* ================= shell ================= */
 function setTab(t) {
@@ -911,7 +947,7 @@ async function boot() {
   (await store.allDoors()).forEach((d) => doors.set(d.id, d));
   visits = await store.allVisits();
   outboxN = await store.outboxCount();
-  try { propSettings.regridToken = localStorage.getItem("knock.regrid") || ""; } catch {}
+  try { propSettings.regridToken = localStorage.getItem("knock.regrid") || ""; propSettings.countyLayers = JSON.parse(localStorage.getItem("knock.countyLayers") || "{}"); } catch {}
   initMap(); paintAll();
   const ds = [...doors.values()];
   if (ds.length && !me) map.fitBounds(L.latLngBounds(ds.map((d) => [d.lat, d.lng])).pad(0.1), { maxZoom: 17 });
@@ -921,6 +957,8 @@ async function boot() {
     reps = await sync.reps().catch(() => []);
     const tok = await sync.getTeamSetting("regrid_token").catch(() => null);
     if (tok != null) { propSettings.regridToken = tok; try { localStorage.setItem("knock.regrid", tok); } catch {} }
+    const layers = await sync.getTeamSetting("county_layers").catch(() => null);
+    if (layers) { try { propSettings.countyLayers = { ...JSON.parse(layers), ...propSettings.countyLayers }; localStorage.setItem("knock.countyLayers", JSON.stringify(propSettings.countyLayers)); } catch {} }
     await sync.push(); await sync.pull(); sync.live();
     setInterval(() => sync.push().then(() => sync.pull()), 60000);
   }

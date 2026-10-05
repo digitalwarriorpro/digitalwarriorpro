@@ -41,21 +41,31 @@ mailbox under **Authentication → Emails → SMTP Settings**.
 
 Optional: point `knock.danosdents.com` at it under **Settings → Pages → Custom domain**.
 
-### 3. Homeowner and home value lookups: Regrid (about 10 minutes)
+### 3. Homeowner and home value lookups (free for Johnson, Wyandotte and Jackson counties)
 
-Owner names, owner-lives-here vs. rental, county home value, year built, square feet and last sale come
-from county property records through [Regrid](https://regrid.com), which covers every KC metro county
-(Johnson, Wyandotte, Jackson, Clay, Platte, Cass and the rest) with one API.
+Owner names, owner-lives-here vs. likely rental, home value, year built, square feet and last sale come
+straight from the counties' own public parcel maps:
 
-1. Sign up for a Regrid API plan and copy your API token. It's a paid service; check current pricing on their site.
-2. In the app: tap your name → **Homeowner and home value lookups** → paste the token → **Save for the whole team**.
-   The token is stored in the team database (reps only), not in the published code.
-3. From then on, opening a door looks up its owner automatically, once. The result is saved on the door
-   and shared with everyone, so each house is only paid for once. **Look up owners for doors on the map
-   screen** does a whole block at once (up to 250 doors per tap).
+| County | County GIS server |
+| --- | --- |
+| Johnson County, KS | `maps.jocogov.org/arcgis/rest/services` (AIMS) |
+| Wyandotte County, KS | `gisweb.wycokck.org/arcgis/rest/services` |
+| Jackson County, MO | `jcgis.jacksongov.org/arcgis/rest/services` |
 
-No Regrid plan? Download a parcel export from the county (most offer CSV with owner and appraised value)
-and import it under **Add doors from a list**. Columns it reads: `owner`, `mailing address`, `home value`
+Each county names its layers and fields differently, so the first lookup in each county finds the parcel
+layer and its owner/value fields on its own and remembers them for the whole team.
+
+**Check it once from a phone:** tap your name → **Test county records**. Each county should show a real
+owner name, a value and a year built. A red line means the county server refused the app or didn't expose
+owners; send a screenshot to Marcus. A county's layer and field names can be pinned in `js/county.js`
+if they ever change.
+
+After that, opening a door looks it up automatically, once, and shares the result with the team.
+**Look up doors on screen** does a whole block at once (up to 250 doors per tap).
+
+**Other counties** (Clay, Platte, Cass, Leavenworth…): either paste a [Regrid](https://regrid.com) API
+token under Settings (paid; used only outside the three free counties), or import that county's parcel
+CSV under **Add doors from a list**. Columns it reads: `owner`, `mailing address`, `home value`
 (or `appraised value` / `market value`), `year built`, `sqft`, `sale date`, `sale price`, `parcel`.
 
 ### 4. Shop details (2 minutes)
@@ -118,7 +128,8 @@ js/main.js                 Map, knock flow, leads, today, settings
 js/store.js                On-phone database (IndexedDB) and outbox
 js/sync.js                 Supabase sign-in, push/pull, live updates
 js/addresses.js            OpenStreetMap address lookups and CSV import/export
-js/property.js             Homeowner and home value lookups (Regrid) and county CSV columns
+js/county.js               Free county parcel lookups (Johnson, Wyandotte, Jackson): layer discovery and field mapping
+js/property.js             Lookup routing (county first, Regrid fallback) and county CSV columns
 js/config.js               Team settings (Supabase keys, shop, storms, slots, tiles)
 sw.js, manifest.webmanifest  Offline support and home-screen install
 vendor/                    Leaflet 1.9.4 and supabase-js 2.45.4, bundled so the app never depends on a CDN

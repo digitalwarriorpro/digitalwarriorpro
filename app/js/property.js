@@ -1,19 +1,41 @@
 // Homeowner and home value lookups from public property records.
-// Provider: Regrid (nationwide parcel data; covers every KC metro county with one API).
-// A lookup runs once per door; the result is saved on the door and shared with the team,
-// so each house is only paid for once.
+// 1. Free: Johnson County KS, Wyandotte County KS and Jackson County MO parcel maps (county.js).
+// 2. Optional fallback for anywhere else: Regrid (paid nationwide parcel API).
+// A lookup runs once per door; the result is saved on the door and shared with the team.
+import { CONFIG } from "./config.js";
+import { countyFor, discover, queryPoint, fromCounty } from "./county.js";
 
 const pick = (o, ...keys) => { for (const k of keys) { const v = o?.[k]; if (v != null && v !== "") return v; } return null; };
 const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[$,]/g, "")); return isFinite(n) && n > 0 ? n : null; };
-const norm = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\b(STREET|ST|TERRACE|TER|TERR|AVENUE|AVE|DRIVE|DR|ROAD|RD|LANE|LN|COURT|CT|PLACE|PL|CIRCLE|CIR|PARKWAY|PKWY|BOULEVARD|BLVD|WEST|W|EAST|E|NORTH|N|SOUTH|S)\b/g, "").replace(/\s+/g, " ").trim();
+export const norm = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\b(STREET|ST|TERRACE|TER|TERR|AVENUE|AVE|DRIVE|DR|ROAD|RD|LANE|LN|COURT|CT|PLACE|PL|CIRCLE|CIR|PARKWAY|PKWY|BOULEVARD|BLVD|WEST|W|EAST|E|NORTH|N|SOUTH|S)\b/g, "").replace(/\s+/g, " ").trim();
 
-export function propertyEnabled(settings) { return !!settings?.regridToken; }
+export function propertyEnabled(settings) { return CONFIG.countyRecords !== false || !!settings?.regridToken; }
 
+// settings: { regridToken, countyLayers: { [countyKey]: {url, name, map} }, onDiscover(key, layer) }
+// Returns the fields to save on the door, or null when no source covers this spot.
 export async function lookupProperty(lat, lng, settings) {
+  if (CONFIG.countyRecords !== false) {
+    for (const county of countyFor(lat, lng)) {
+      let layer = settings.countyLayers?.[county.key];
+      if (!layer) {
+        layer = await discover(county);
+        if (!layer) continue;
+        settings.countyLayers = { ...(settings.countyLayers || {}), [county.key]: layer };
+        settings.onDiscover?.(county.key, layer);
+      }
+      const attrs = await queryPoint(layer, lat, lng);
+      if (attrs) return fromCounty(attrs, layer, county, titleCase, norm);
+    }
+  }
+  if (settings.regridToken) return lookupRegrid(lat, lng, settings);
+  return countyFor(lat, lng).length ? { prop_source: "County records", prop_checked_at: new Date().toISOString() } : null;
+}
+
+async function lookupRegrid(lat, lng, settings) {
   const url = `https://app.regrid.com/api/v2/parcels/point?lat=${lat}&lon=${lng}&limit=1&token=${encodeURIComponent(settings.regridToken)}`;
   const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (res.status === 401 || res.status === 403) throw new Error("The property data key was refused. Check it in Settings.");
-  if (res.status === 429) throw new Error("Property lookups are over the plan's limit for now.");
+  if (res.status === 401 || res.status === 403) throw new Error("The Regrid key was refused. Check it in Settings.");
+  if (res.status === 429) throw new Error("Regrid lookups are over the plan's limit for now.");
   if (!res.ok) throw new Error(`Property lookup failed (${res.status}).`);
   const json = await res.json();
   const feats = json?.parcels?.features || json?.features || [];

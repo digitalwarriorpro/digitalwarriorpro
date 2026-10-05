@@ -39,6 +39,9 @@ export const CONFIG = {
 
   goals: { doors: 60, booked: 4 },
 
+  // Free homeowner and home value lookups from Johnson, Wyandotte and Jackson county parcel maps
+  countyRecords: true,
+
   // "$300K+ homes" filter on the map
   valueFilter: 300000,
 };
