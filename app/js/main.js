@@ -822,6 +822,7 @@ function renderToday() {
 /* ================= settings / sign-in gate ================= */
 function showGate(kind, msg) {
   const g = $("#gate"); g.hidden = false;
+  queueMicrotask(() => { const card = g.querySelector(".gate-card"); if (card && !card.querySelector(".ver")) card.insertAdjacentHTML("beforeend", `<p class="ver">Version ${CONFIG.appVersion}</p>`); });
   const c = connection();
   if (kind === "signin") {
     g.innerHTML = `<div class="gate-card"><div class="brand">Dano's Dents <span>Knock</span></div>
@@ -865,6 +866,7 @@ function showGate(kind, msg) {
   </div>`;
 }
 function connForm(c) {
+  if (!c.configured && CONFIG.supabaseUrl && CONFIG.supabaseAnonKey) return `<button class="btn go" data-g="team">Sign in to the Dano's Dents team</button>`;
   return `<details ${c.configured ? "" : "open"}><summary class="note" style="cursor:pointer">Team database connection</summary>
     <form id="f-conn" class="fields" style="margin-top:8px">
       <div class="field wide"><label for="g-url">Supabase project URL</label><input type="url" id="g-url" value="${esc(c.url)}" placeholder="https://xxxx.supabase.co"></div>
@@ -936,6 +938,7 @@ $("#gate").addEventListener("click", async (e) => {
   const g = e.target.closest("[data-g]")?.dataset.g; if (!g) return;
   if (g === "close") { $("#gate").hidden = true; return; }
   if (g === "local") { saveConnection("", ""); location.reload(); return; }
+  if (g === "team") { try { localStorage.removeItem("knock.sbUrl"); localStorage.removeItem("knock.sbKey"); } catch {} location.reload(); return; }
   if (g === "use-code") { $("#f-pass").hidden = true; $("#f-email").hidden = false; $("#g-email2").value ||= $("#g-email").value; $("#g-email2").focus(); return; }
   if (g === "sync") { await sync.push(); await sync.pull(); toast("Synced"); showGate("settings"); }
   if (g === "signout") { await sync.signOut(); location.reload(); }
@@ -1103,7 +1106,15 @@ document.addEventListener("click", async (e) => {
 });
 (async function start() {
   renderInstall();
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    // Check for a new version on every open; when it takes over, reload once so the phone runs it
+    // (home-screen apps on iPhone otherwise keep running the old files).
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((r) => r.update()).catch(() => {});
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {}); });
+  }
   try { navigator.storage?.persist?.(); } catch {}
   const live = await sync.init();
   if (live) {

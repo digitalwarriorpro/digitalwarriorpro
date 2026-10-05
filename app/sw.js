@@ -1,6 +1,6 @@
 // Offline support: the app shell and libraries are cached on install; map tiles are cached
 // as reps view them, so a street they've looked at once still shows with no signal.
-const VERSION = "knock-v16";
+const VERSION = "knock-v17";
 const SHELL = [
   "./", "index.html", "styles.css", "manifest.webmanifest", "icon-32.png", "icon-180.png", "icon-192.png", "icon-512.png",
   "js/main.js", "js/config.js", "js/store.js", "js/sync.js", "js/addresses.js", "js/property.js", "js/county.js", "js/vehicles.js",

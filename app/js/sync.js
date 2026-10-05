@@ -12,16 +12,22 @@ let channel = null;
 
 export function connection() {
   let url = CONFIG.supabaseUrl, key = CONFIG.supabaseAnonKey;
+  let off = false;
   try {
+    // "off" = this phone chose single-phone mode even though the app ships with the team database
+    off = localStorage.getItem("knock.sbUrl") === "off";
     url = localStorage.getItem("knock.sbUrl") || url;
     key = localStorage.getItem("knock.sbKey") || key;
   } catch {}
+  if (off) return { url: "", key: "", configured: false };
   return { url, key, configured: !!(url && key) };
 }
 export function saveConnection(url, key) {
   try {
-    localStorage.setItem("knock.sbUrl", url.trim());
-    localStorage.setItem("knock.sbKey", key.trim());
+    url = url.trim(); key = key.trim();
+    if (!url && !key) { localStorage.setItem("knock.sbUrl", "off"); localStorage.removeItem("knock.sbKey"); return; }
+    localStorage.setItem("knock.sbUrl", url);
+    localStorage.setItem("knock.sbKey", key);
   } catch {}
 }
 
