@@ -870,6 +870,19 @@ function connForm(c) {
       <div class="field wide"><label for="g-key">Anon public key</label><input type="text" id="g-key" value="${esc(c.key)}" autocomplete="off"></div>
       <button class="btn field wide">Save and reload</button></form></details>`;
 }
+// Errors on the name/settings screens show inside the card; a toast would sit behind it.
+function gateError(msg) {
+  const card = $("#gate .gate-card"); if (!card) return toast(msg);
+  card.querySelector(".gate-err")?.remove();
+  card.querySelector("h1")?.insertAdjacentHTML("afterend", `<div class="notice err gate-err">${esc(msg)}</div>`);
+}
+function dbHint(err) {
+  const m = `${err?.message || ""} ${err?.code || ""}`;
+  if (/does not exist|could not find the table|schema cache|42P01|PGRST20[45]/i.test(m)) return "The team database isn't set up yet. In Supabase, open SQL Editor, paste schema.sql and click Run, then try again.";
+  if (/row-level security|42501|permission denied/i.test(m)) return "The database refused the save (security rules). Re-run schema.sql in Supabase's SQL Editor, then try again.";
+  if (/failed to fetch|load failed|network/i.test(m)) return "Couldn't reach the team database. Check signal and try again.";
+  return "";
+}
 let pendingEmail = "";
 $("#gate").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -906,7 +919,9 @@ $("#gate").addEventListener("submit", async (e) => {
     }
   } catch (err) {
     const msg = /invalid login credentials/i.test(err.message) ? "Email or password is wrong. Check with Dano, or use \"Email me a code\"." : /rate limit/i.test(err.message) ? "Too many code emails right now. Sign in with your password, or try again in an hour." : /not.*found|signups/i.test(err.message) ? "That email isn't on the team yet. Ask Dano to add you." : /expired|invalid/i.test(err.message) ? "That code didn't work. Check it, or request a new one." : err.message;
-    if (f === "f-pass" || f === "f-email" || f === "f-code") showGate("signin", msg); else toast(msg);
+    if (f === "f-pass" || f === "f-email" || f === "f-code") showGate("signin", msg);
+    else if (!$("#gate").hidden) gateError(dbHint(err) || msg);
+    else toast(msg);
   }
 });
 $("#gate").addEventListener("click", async (e) => {
