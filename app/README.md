@@ -99,6 +99,13 @@ texts and calendar invites), check the `storms` list and the inspection `times`,
   (mail goes to another address), home value, year built, square feet and last sale. The Contact step offers
   **Use owner on record** to fill the name. Filters: **Owner lives here** and **$300K+ homes**
   (threshold in `config.js → valueFilter`). Lead exports include all of it.
+- **Cars outside**: before knocking, tap how many cars are in the driveway (0, 1, 2, 3+) and what kind
+  (Truck, SUV, Car, Van). It saves right away, shows on the Nearby list, and the **Cars outside** filter
+  finds houses with vehicles to inspect. When someone answers, the Vehicles step starts with one card per car seen.
+- **VIN lookup**: type the 17-character VIN (bottom of the windshield, driver's side, or the door-jamb sticker)
+  and tap **Look up**. NHTSA's free database fills in year, make, model and trim, and lists recalls on file for
+  that model year. The app catches typos (wrong length, I/O/Q, bad check digit). Needs signal; the VIN is
+  saved either way.
 - **Undo** appears for 6 seconds after every save.
 - **Leads** lists bookings, quotes and come-backs (yours or the whole team's) and exports a CSV for the
   master lead sheet. **Today** shows your doors, bookings, rate per hour and the crew board.
@@ -128,6 +135,7 @@ js/main.js                 Map, knock flow, leads, today, settings
 js/store.js                On-phone database (IndexedDB) and outbox
 js/sync.js                 Supabase sign-in, push/pull, live updates
 js/addresses.js            OpenStreetMap address lookups and CSV import/export
+js/vehicles.js             VIN check digit, NHTSA VIN decode and recall lookups
 js/county.js               Free county parcel lookups (Johnson, Wyandotte, Jackson): layer discovery and field mapping
 js/property.js             Lookup routing (county first, Regrid fallback) and county CSV columns
 js/config.js               Team settings (Supabase keys, shop, storms, slots, tiles)

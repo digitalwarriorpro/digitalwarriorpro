@@ -129,3 +129,6 @@ create table if not exists public.app_settings (
 alter table public.app_settings enable row level security;
 drop policy if exists app_settings_all on public.app_settings;
 create policy app_settings_all on public.app_settings for all to authenticated using (public.is_rep()) with check (public.is_rep());
+
+-- Cars seen from the street before knocking: {count, types[], at, by}
+alter table public.doors add column if not exists driveway jsonb;

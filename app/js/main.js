@@ -4,6 +4,7 @@ import { sync, connection, saveConnection } from "./sync.js";
 import { addressesInView, reverseLookup, parseCsv, toCsv } from "./addresses.js";
 import { lookupProperty, propertyEnabled, money, titleCase, norm } from "./property.js";
 import { COUNTIES, discover, queryPoint, fromCounty } from "./county.js";
+import { cleanVin, vinStatus, decodeVin, recallsFor } from "./vehicles.js";
 
 /* ================= constants ================= */
 const S = {
@@ -16,6 +17,7 @@ const S = {
   dnk:     { l: "Do not knock",       c: "--s-dnk" },
 };
 const OUTCOMES = ["booked", "lead", "back", "no"];
+const CAR_TYPES = ["Truck", "SUV", "Car", "Van"];
 const PANELS = ["Hood", "Roof", "Trunk", "L doors", "R doors", "L fender", "R fender", "Glass"];
 const NO_REASONS = ["No damage", "Already repaired", "Using another shop", "Doesn't want a claim", "Renter / not the owner", "Other"];
 const BACK_WHEN = ["Later today", "Tonight", "Tomorrow AM", "Tomorrow PM", "This weekend"];
@@ -51,6 +53,7 @@ let tab = "map", mode = "map", filter = "all", leadScope = "mine", leadFilter = 
 let adding = false, importList = null, importTurf = "", importRep = "";
 let undo = null, lastSaved = null;
 let reps = [];
+const vinBusy = new Set();
 const photoUrls = new Map();
 let outboxN = 0;
 let propSettings = { regridToken: "", countyLayers: {}, onDiscover: (key, layer) => saveCountyLayers() };
@@ -88,13 +91,13 @@ function newDoor(base) {
     turf: base.turf || "", assigned_to: base.assigned_to || "",
     status: "none", attempts: 0, hanger: false, back_when: "", reason: "", vehicles: [],
     name: base.name || "", phone: base.phone || "", email: "", contact_pref: "Text", consent: false,
-    slot: null, notes: base.notes || "", storm: CONFIG.storms[0] || "", photos: [],
+    slot: null, notes: base.notes || "", storm: CONFIG.storms[0] || "", photos: [], driveway: null,
     ...Object.fromEntries(PROP_FIELDS.map((k) => [k, base[k] ?? (["owner_occupied", "home_value", "year_built", "sqft", "last_sale_price", "prop_checked_at"].includes(k) ? null : "")])),
     created_at: nowIso(), updated_at: nowIso(), updated_by: rep.id || null, updated_by_name: rep.name,
   };
 }
 const isMine = (d) => !d.assigned_to || d.assigned_to === rep.name;
-const matches = (d, f = filter) => f === "all" ? true : f === "mine" ? isMine(d) : f === "todo" ? d.status === "none" : f === "revisit" ? (d.status === "back" || d.status === "nothome") : f === "leads" ? (d.status === "lead" || d.status === "booked") : f === "owners" ? d.owner_occupied === true : f === "value" ? (d.home_value || 0) >= CONFIG.valueFilter : true;
+const matches = (d, f = filter) => f === "all" ? true : f === "mine" ? isMine(d) : f === "todo" ? d.status === "none" : f === "revisit" ? (d.status === "back" || d.status === "nothome") : f === "leads" ? (d.status === "lead" || d.status === "booked") : f === "owners" ? d.owner_occupied === true : f === "value" ? (d.home_value || 0) >= CONFIG.valueFilter : f === "cars" ? (d.driveway?.count || 0) > 0 : true;
 function dist(a, b) {
   const R = 6371e3, t = Math.PI / 180;
   const dLat = (b.lat - a.lat) * t, dLng = (b.lng - a.lng) * t;
@@ -202,7 +205,7 @@ function renderNet() {
 function renderFilters() {
   const all = [...doors.values()];
   const n = (f) => all.filter((d) => matches(d, f)).length;
-  $("#filters").innerHTML = [["all", "All"], ["mine", "My turf"], ["todo", "To knock"], ["revisit", "Revisit"], ["leads", "Leads"], ["owners", "Owner lives here"], ["value", `${money(CONFIG.valueFilter)}+ homes`]]
+  $("#filters").innerHTML = [["all", "All"], ["mine", "My turf"], ["todo", "To knock"], ["revisit", "Revisit"], ["leads", "Leads"], ["cars", "Cars outside"], ["owners", "Owner lives here"], ["value", `${money(CONFIG.valueFilter)}+ homes`]]
     .map(([k, l]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l} <span class="n">${n(k)}</span></button>`).join("");
   document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === mode));
   $("#walk").hidden = mode !== "list";
@@ -236,7 +239,7 @@ function renderWalk() {
   const list = [...doors.values()].filter((d) => matches(d)).map((d) => ({ d, m: dist(o, d) })).sort((a, b) => a.m - b.m).slice(0, 80);
   $("#walk").innerHTML = (list.length ? list.map(({ d, m }) => `
     <div class="wrow"><div style="min-width:0"><button class="waddr" data-open="${esc(d.id)}">${esc(d.address)}</button>
-      <div class="wsub"><span class="pill"><i style="background:${colorOf(d.status)}"></i>${S[d.status].l}${d.status === "nothome" ? ` ×${d.attempts}` : ""}</span><span>· ${fmtDist(m)}</span>${d.home_value ? `<span>· ${money(d.home_value)}</span>` : ""}${d.owner ? `<span>· ${esc(d.owner)}</span>` : ""}${d.back_when && d.status === "back" ? `<span>· ${esc(d.back_when)}</span>` : ""}${d.slot && d.status === "booked" ? `<span>· ${esc(slotLabel(d.slot))}</span>` : ""}</div></div>
+      <div class="wsub"><span class="pill"><i style="background:${colorOf(d.status)}"></i>${S[d.status].l}${d.status === "nothome" ? ` ×${d.attempts}` : ""}</span><span>· ${fmtDist(m)}</span>${d.driveway?.count ? `<span>· ${carsLabel(d.driveway)}</span>` : ""}${d.home_value ? `<span>· ${money(d.home_value)}</span>` : ""}${d.owner ? `<span>· ${esc(d.owner)}</span>` : ""}${d.back_when && d.status === "back" ? `<span>· ${esc(d.back_when)}</span>` : ""}${d.slot && d.status === "booked" ? `<span>· ${esc(slotLabel(d.slot))}</span>` : ""}</div></div>
       ${["none", "nothome", "back"].includes(d.status) ? `<button class="qbtn" data-nh="${esc(d.id)}">Not home</button>` : `<button class="qbtn" data-open="${esc(d.id)}">Open</button>`}
     </div>`).join("") : `<div class="empty">No doors match. Switch to the map, zoom to a street and tap the house button to load doors.</div>`)
     + `<p class="note">Sorted by distance from ${me ? "you" : "the map center"}.</p>`;
@@ -259,7 +262,10 @@ function openPeek(id) {
 function closeSheet() { const old = sel; sheet = null; draft = null; sel = null; importList = null; if (old) paintDoor(old); renderAll(); }
 function startFlow() {
   draft = clone(sel);
-  if (!draft.vehicles?.length) draft.vehicles = [{ ymm: "", panels: [], sev: "", insurer: "", claim: "" }];
+  if (!draft.vehicles?.length) {
+    const n = Math.max(1, Math.min(draft.driveway?.count || 1, 4)), types = draft.driveway?.types || [];
+    draft.vehicles = Array.from({ length: n }, (_, i) => ({ ymm: "", vin: "", panels: [], sev: "", insurer: "", claim: "", seen: types[i] || "" }));
+  }
   if (!OUTCOMES.includes(draft.status)) draft.status = "";
   sheet = "flow"; step = 0; slotPage = 0; renderSheet();
 }
@@ -338,6 +344,39 @@ async function lookupOnScreen() {
   toast(`Owner info added to ${ok} door${ok === 1 ? "" : "s"}`);
 }
 
+const carsLabel = (dw) => `${dw.count >= 3 ? "3+" : dw.count} car${dw.count === 1 ? "" : "s"} outside${dw.types?.length ? ` (${dw.types.join(", ")})` : ""}`;
+function driveway(d) {
+  const dw = d.driveway || {};
+  return `<div class="drive">
+    <div class="label">Cars outside${dw.at ? ` <span class="note" style="text-transform:none;letter-spacing:0">· ${esc(dw.by || "")} ${esc(isToday(dw.at) ? timeShort(dw.at) : new Date(dw.at).toLocaleDateString("en-US", { month: "numeric", day: "numeric" }))}</span>` : ""}</div>
+    <div class="toggles" role="group" aria-label="Number of cars outside">${[0, 1, 2, 3].map((n) => `<button class="tog" data-dn="${n}" aria-pressed="${dw.at ? (dw.count || 0) === n : false}">${n === 3 ? "3+" : n}</button>`).join("")}
+      ${dw.count ? CAR_TYPES.map((t) => `<button class="tog" data-dt="${t}" aria-pressed="${(dw.types || []).includes(t)}">${t}</button>`).join("") : ""}</div>
+  </div>`;
+}
+function recallBox(v) {
+  if (!v.recalls) return "";
+  if (!v.recalls.length) return `<p class="note">No recalls on file for ${esc(v.ymm)} models.</p>`;
+  return `<details class="recalls"><summary><strong>${v.recalls.length} recall${v.recalls.length === 1 ? "" : "s"}</strong> on file for ${esc(v.ymm.split(" ").slice(0, 3).join(" "))} models</summary>
+    <ul>${v.recalls.slice(0, 8).map((r) => `<li>${esc(r.component)} <span class="note">· ${esc(r.id)}</span></li>`).join("")}</ul>
+    <p class="note">These cover the model year, not this exact car. The owner can check their VIN at nhtsa.gov/recalls.</p></details>`;
+}
+async function lookupVin(vi) {
+  const v = draft.vehicles[vi];
+  const vin = cleanVin(v.vin);
+  v.vin = vin;
+  const st = vinStatus(vin);
+  if (st === "length") { v.vin_note = `A VIN has 17 characters. This one has ${vin.length}.`; v.vin_warn = true; return renderSheet(); }
+  if (st === "letters") { v.vin_note = "VINs never use the letters I, O or Q. Those are probably 1 or 0."; v.vin_warn = true; return renderSheet(); }
+  if (!navigator.onLine) { v.vin_note = "No signal. The VIN is saved; look it up later from this visit."; v.vin_warn = true; return renderSheet(); }
+  vinBusy.add(vi); renderSheet();
+  try {
+    const info = await decodeVin(vin);
+    Object.assign(v, { ymm: info.ymm, body: info.body, vin_note: st === "check" ? `${info.body || "Vehicle"} · the VIN's check digit doesn't match, so double-check one character.` : info.body || "", vin_warn: st === "check" });
+    try { v.recalls = await recallsFor(info.year, info.make, info.model); } catch { v.recalls = undefined; }
+  } catch (err) { v.vin_note = err.message; v.vin_warn = true; }
+  finally { vinBusy.delete(vi); renderSheet(); }
+}
+
 function history(d) {
   const vs = visits.filter((v) => v.door_id === d.id).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8);
   return vs.length ? `<div><div class="label" style="margin-bottom:6px">History</div><div class="history">${vs.map((v) => `<div><time>${esc(isToday(v.at) ? timeShort(v.at) : new Date(v.at).toLocaleDateString("en-US", { month: "numeric", day: "numeric" }))}</time><span>${esc(S[v.outcome]?.l || v.outcome)}${v.details?.reason ? ` · ${esc(v.details.reason)}` : ""}${v.details?.slot ? ` · ${esc(slotLabel(v.details.slot))}` : ""} · ${esc(v.rep_name || "")}</span></div>`).join("")}</div></div>` : "";
@@ -388,7 +427,7 @@ function renderSheet() {
       ${d.name || d.phone ? `<div class="notice"><strong>${esc(d.name)}</strong>${d.phone ? ` · <span class="num">${esc(d.phone)}</span>` : ""}${d.contact_pref ? ` · prefers ${esc(d.contact_pref.toLowerCase())}` : ""}</div>` : ""}
       ${d.slot && d.status === "booked" ? `<div class="notice warn">Inspection <strong>${esc(slotLabel(d.slot))}</strong></div>` : ""}
       ${contactActions(d)}
-      ${v.length ? `<div class="history">${v.map((x) => `<div><span><strong style="color:var(--ink)">${esc(x.ymm || "Vehicle")}</strong> · ${esc(x.panels.join(", ") || "no panels marked")}${x.sev ? ` · ${esc(x.sev.toLowerCase())}` : ""}${x.insurer ? ` · ${esc(x.insurer)}` : ""}${x.claim ? ` · claim ${esc(x.claim.toLowerCase())}` : ""}</span></div>`).join("")}</div>` : ""}
+      ${v.length ? `<div class="history">${v.map((x) => `<div><span><strong style="color:var(--ink)">${esc(x.ymm || "Vehicle")}</strong> · ${esc(x.panels.join(", ") || "no panels marked")}${x.sev ? ` · ${esc(x.sev.toLowerCase())}` : ""}${x.insurer ? ` · ${esc(x.insurer)}` : ""}${x.claim ? ` · claim ${esc(x.claim.toLowerCase())}` : ""}${x.vin ? ` · VIN ${esc(x.vin)}` : ""}${x.recalls?.length ? ` · ${x.recalls.length} model recall${x.recalls.length === 1 ? "" : "s"}` : ""}</span></div>`).join("")}</div>` : ""}
       ${d.photos?.length ? `<div class="photos">${d.photos.map((p) => `<img data-photo="${esc(p)}" alt="Damage photo">`).join("")}</div>` : ""}
       ${d.reason && d.status === "no" ? `<div class="notice">Reason: ${esc(d.reason)}</div>` : ""}
       ${d.notes ? `<div class="notice">${esc(d.notes)}</div>` : ""}
@@ -397,7 +436,7 @@ function renderSheet() {
     }
     host.innerHTML = `<div class="sheet peek" role="dialog" aria-label="${esc(d.address)}"><div class="sheet-scroll"><div class="grab"></div>${head(d, true)}
       ${sheet === "edit-addr" ? `<div class="row"><button class="btn go" data-a="save-addr">Save address</button><button class="btn" data-a="peek">Cancel</button></div>` : ""}
-      ${facts(d)}${homeInfo(d)}${body}${history(d)}</div></div>`;
+      ${facts(d)}${driveway(d)}${homeInfo(d)}${body}${history(d)}</div></div>`;
     loadPhotos();
     return;
   }
@@ -426,7 +465,12 @@ function renderSheet() {
   if (cur === "Vehicles") {
     body = draft.vehicles.map((v, vi) => `
       <div class="veh">
-        <div class="veh-head"><strong>Vehicle ${vi + 1}</strong>${draft.vehicles.length > 1 ? `<button class="btn link" data-delveh="${vi}">Remove</button>` : ""}</div>
+        <div class="veh-head"><strong>Vehicle ${vi + 1}${v.seen ? ` · <span class="note">${esc(v.seen)} seen from the street</span>` : ""}</strong>${draft.vehicles.length > 1 ? `<button class="btn link" data-delveh="${vi}">Remove</button>` : ""}</div>
+        <div class="field"><label for="vin-${vi}">VIN <span class="note">(through the windshield, driver's side, or the door jamb sticker)</span></label>
+          <div class="vinrow"><input type="text" id="vin-${vi}" data-v="${vi}" data-k="vin" value="${esc(v.vin || "")}" maxlength="17" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="17 characters" class="mono">
+          <button class="btn" data-vin="${vi}" ${vinBusy.has(vi) ? "disabled" : ""}>${vinBusy.has(vi) ? "Looking up…" : "Look up"}</button></div>
+          ${v.vin_note ? `<p class="note ${v.vin_warn ? "warn-text" : ""}">${esc(v.vin_note)}</p>` : ""}</div>
+        ${recallBox(v)}
         <div class="field"><label for="ymm-${vi}">Year, make, model</label><input type="text" id="ymm-${vi}" data-v="${vi}" data-k="ymm" value="${esc(v.ymm)}" placeholder="2021 Ford F-150" autocomplete="off"></div>
         <div class="label">Tap the damaged panels</div>
         ${carSvg(vi, v.panels)}
@@ -539,7 +583,7 @@ $("#sheet-host").addEventListener("input", (e) => {
 });
 $("#sheet-host").addEventListener("keydown", (e) => { const p = e.target.closest("[data-panel]"); if (p && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); p.dispatchEvent(new MouseEvent("click", { bubbles: true })); } });
 $("#sheet-host").addEventListener("click", async (e) => {
-  const t = e.target.closest("[data-a],[data-obj],[data-oc],[data-slot],[data-slotpage],[data-back],[data-reason],[data-contact],[data-sev],[data-panel],[data-step],[data-delveh]");
+  const t = e.target.closest("[data-a],[data-obj],[data-oc],[data-slot],[data-slotpage],[data-back],[data-reason],[data-contact],[data-sev],[data-panel],[data-step],[data-delveh],[data-dn],[data-dt],[data-vin]");
   if (!t) return;
   const a = t.dataset.a;
   if (a === "close") return closeSheet();
@@ -556,9 +600,19 @@ $("#sheet-host").addEventListener("click", async (e) => {
   if (a === "back") { step--; return renderSheet(); }
   if (a === "next") { step++; return renderSheet(); }
   if (a === "next-door") return goNext(sel.id);
-  if (a === "addveh") { draft.vehicles.push({ ymm: "", panels: [], sev: "", insurer: "", claim: "" }); return renderSheet(); }
+  if (a === "addveh") { draft.vehicles.push({ ymm: "", vin: "", panels: [], sev: "", insurer: "", claim: "" }); return renderSheet(); }
   if (a === "do-import") return doImport();
   if (a === "lookup") { lookupDoor(sel).catch(() => {}); return; }
+  if (t.dataset.vin != null) return lookupVin(+t.dataset.vin);
+  if (t.dataset.dn != null || t.dataset.dt) {
+    const d = sel, dw = { ...(d.driveway || { types: [] }) };
+    if (t.dataset.dn != null) { dw.count = +t.dataset.dn; if (!dw.count) dw.types = []; }
+    else dw.types = (dw.types || []).includes(t.dataset.dt) ? dw.types.filter((x) => x !== t.dataset.dt) : [...(dw.types || []), t.dataset.dt];
+    dw.at = nowIso(); dw.by = rep.name;
+    d.driveway = dw;
+    await saveDoor(d);
+    return renderAll();
+  }
   if (a === "use-owner") { draft.name = sel.owner; return renderSheet(); }
   if (t.dataset.delveh != null) { draft.vehicles.splice(+t.dataset.delveh, 1); return renderSheet(); }
   if (t.dataset.step != null) { step = +t.dataset.step; return renderSheet(); }
@@ -714,12 +768,13 @@ function exportCsv() {
   const rows = [...doors.values()].filter((d) => ["lead", "booked", "back", "no"].includes(d.status)).map((d) => ({
     status: S[d.status].l, name: d.name, phone: d.phone, email: d.email, contact_pref: d.contact_pref, ok_to_text: d.consent ? "yes" : "no",
     address: d.address, city: d.city, zip: d.zip, storm_date: d.storm, inspection: slotLabel(d.slot), come_back: d.back_when, reason: d.reason,
-    vehicles: (d.vehicles || []).map((v) => `${v.ymm} [${v.panels.join("/")}] ${v.sev || ""} ${v.insurer || ""} ${v.claim || ""}`.trim()).join("; "),
+    vehicles: (d.vehicles || []).map((v) => `${v.ymm}${v.vin ? ` VIN ${v.vin}` : ""} [${v.panels.join("/")}] ${v.sev || ""} ${v.insurer || ""} ${v.claim || ""}`.trim()).join("; "),
+    cars_outside: d.driveway?.count ?? "",
     notes: d.notes, source: "Door knock", turf: d.turf, rep: d.updated_by_name, updated: d.updated_at,
     owner_on_record: d.owner, owner_lives_here: d.owner_occupied == null ? "" : d.owner_occupied ? "yes" : "no", owner_mailing: d.mailing_address,
     home_value: d.home_value || "", year_built: d.year_built || "", sqft: d.sqft || "", last_sale: [fmtSale(d.last_sale_date), d.last_sale_price || ""].filter(Boolean).join(" "), parcel: d.parcel_id,
   }));
-  const csv = toCsv(rows, ["status", "name", "phone", "email", "contact_pref", "ok_to_text", "address", "city", "zip", "storm_date", "inspection", "come_back", "reason", "vehicles", "notes", "source", "turf", "rep", "updated", "owner_on_record", "owner_lives_here", "owner_mailing", "home_value", "year_built", "sqft", "last_sale", "parcel"]);
+  const csv = toCsv(rows, ["status", "name", "phone", "email", "contact_pref", "ok_to_text", "address", "city", "zip", "storm_date", "inspection", "come_back", "reason", "vehicles", "notes", "cars_outside", "source", "turf", "rep", "updated", "owner_on_record", "owner_lives_here", "owner_mailing", "home_value", "year_built", "sqft", "last_sale", "parcel"]);
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   a.download = `danos-dents-leads-${new Date().toISOString().slice(0, 10)}.csv`;
