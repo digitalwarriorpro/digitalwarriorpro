@@ -142,3 +142,39 @@ alter table public.doors add column if not exists owner_hidden boolean;
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.reps, public.doors, public.visits, public.app_settings to authenticated;
 grant execute on function public.is_rep() to authenticated;
+
+-- CRM views for Dano: every lead and booking in one list, and each rep's activity by day.
+-- security_invoker keeps the same row-level security as the tables.
+create or replace view public.leads with (security_invoker = true) as
+select
+  case d.status when 'booked' then 'Booked' when 'lead' then 'Lead' when 'back' then 'Come back' end as stage,
+  d.slot as inspection,
+  d.name as customer, d.phone, d.email, d.contact_pref, d.consent as ok_to_text,
+  d.address, d.city, d.zip,
+  jsonb_array_length(d.vehicles) as vehicles,
+  (select string_agg(concat_ws(' · ', nullif(v->>'ymm', ''), nullif((select string_agg(p, ', ') from jsonb_array_elements_text(coalesce(v->'panels', '[]')) p), ''), nullif(v->>'sev', '')), '; ')
+     from jsonb_array_elements(d.vehicles) v) as damage,
+  (select string_agg(distinct v->>'insurer', ', ') from jsonb_array_elements(d.vehicles) v where coalesce(v->>'insurer', '') <> '') as insurers,
+  d.back_when, d.notes, d.storm, d.turf,
+  d.updated_by_name as rep, d.updated_at as last_update, d.id as door_id
+from public.doors d
+where d.status in ('booked', 'lead', 'back')
+order by (d.status = 'booked') desc, d.updated_at desc;
+
+create or replace view public.rep_activity with (security_invoker = true) as
+select
+  (v.at at time zone 'America/Chicago')::date as day,
+  v.rep_name as rep,
+  count(*) as knocks,
+  count(*) filter (where v.outcome = 'nothome') as not_home,
+  count(*) filter (where v.outcome = 'no') as no,
+  count(*) filter (where v.outcome = 'back') as come_back,
+  count(*) filter (where v.outcome = 'lead') as leads,
+  count(*) filter (where v.outcome = 'booked') as booked,
+  min(v.at at time zone 'America/Chicago')::time(0) as first_knock,
+  max(v.at at time zone 'America/Chicago')::time(0) as last_knock
+from public.visits v
+group by 1, 2
+order by 1 desc, booked desc, knocks desc;
+
+grant select on public.leads, public.rep_activity to authenticated;
