@@ -43,6 +43,9 @@ Optional: point `knock.danosdents.com` at it under **Settings → Pages → Cust
 
 ### 3. Homeowner and home value lookups (free for Johnson, Wyandotte and Jackson counties)
 
+**Off for the first launch.** Set `countyRecords: true` in [`js/config.js`](js/config.js) to turn the Homeowner
+card, the owner/value filters and the Settings section back on.
+
 Owner names, owner-lives-here vs. likely rental, home value, year built, square feet and last sale come
 straight from the counties' own public parcel maps:
 

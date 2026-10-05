@@ -202,10 +202,12 @@ function renderNet() {
   else if (outboxN && sync.enabled && sync.user) { nb.hidden = false; nb.textContent = `Sending ${outboxN} change${outboxN > 1 ? "s" : ""}…`; }
   else nb.hidden = true;
 }
+// Owner and value filters only show when lookups are on or doors already carry owner data (e.g. a CSV import)
+const ownerData = () => propertyEnabled(propSettings) || [...doors.values()].some((d) => d.owner || d.home_value);
 function renderFilters() {
   const all = [...doors.values()];
   const n = (f) => all.filter((d) => matches(d, f)).length;
-  $("#filters").innerHTML = [["all", "All"], ["mine", "My turf"], ["todo", "To knock"], ["revisit", "Revisit"], ["leads", "Leads"], ["cars", "Cars outside"], ["owners", "Owner lives here"], ["value", `${money(CONFIG.valueFilter)}+ homes`]]
+  $("#filters").innerHTML = [["all", "All"], ["mine", "My turf"], ["todo", "To knock"], ["revisit", "Revisit"], ["leads", "Leads"], ["cars", "Cars outside"], ...(ownerData() ? [["owners", "Owner lives here"], ["value", `${money(CONFIG.valueFilter)}+ homes`]] : [])]
     .map(([k, l]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l} <span class="n">${n(k)}</span></button>`).join("");
   document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === mode));
   $("#walk").hidden = mode !== "list";
@@ -844,12 +846,12 @@ function showGate(kind, msg) {
       <div class="notice">${sync.enabled ? (sync.user ? `Signed in as <strong>${esc(sync.user.email)}</strong>` : "Team database connected, not signed in") : "Single-phone mode: nothing leaves this phone"} · ${outboxN} change${outboxN === 1 ? "" : "s"} waiting</div>
       <div class="row">${sync.enabled && sync.user ? `<button class="btn" data-g="sync">Sync now</button><button class="btn danger" data-g="signout">Sign out</button>` : ""}</div>
       ${connForm(c)}</section>
-    <section><div class="label">Homeowner and home value lookups</div>
+    ${propertyEnabled(propSettings) ? `<section><div class="label">Homeowner and home value lookups</div>
       <p class="note">Free from the county parcel maps for <strong>Johnson County KS, Wyandotte County KS and Jackson County MO</strong>. Opening a door looks it up once and shares the result with the team.</p>
       <div class="row"><button class="btn" data-g="test-counties">Test county records</button>${propertyEnabled(propSettings) ? `<button class="btn" data-g="lookup-screen">Look up doors on screen</button>` : ""}</div>
       <div id="county-test"></div>
       <details><summary class="note" style="cursor:pointer">Other counties (Clay, Platte, Cass…): Regrid paid API</summary>
-      <form id="f-prop" class="field" style="margin-top:8px"><label for="g-regrid">Regrid API token (optional)</label><input type="text" id="g-regrid" value="${esc(propSettings.regridToken)}" autocomplete="off" placeholder="Paste token"><button class="btn" style="margin-top:8px">Save${sync.enabled && sync.user ? " for the whole team" : " on this phone"}</button></form></details></section>
+      <form id="f-prop" class="field" style="margin-top:8px"><label for="g-regrid">Regrid API token (optional)</label><input type="text" id="g-regrid" value="${esc(propSettings.regridToken)}" autocomplete="off" placeholder="Paste token"><button class="btn" style="margin-top:8px">Save${sync.enabled && sync.user ? " for the whole team" : " on this phone"}</button></form></details></section>` : ""}
     <section><div class="label">Add doors from a list</div>
       <p class="note">CSV with columns address, lat, lng. Optional: owner, mailing address, home value, year built, sqft, sale date, sale price, parcel, plus city, zip, name, phone, notes. Works with county parcel exports and Hail Recon lists.</p>
       <label class="btn" for="csv-in">Choose CSV file</label></section>

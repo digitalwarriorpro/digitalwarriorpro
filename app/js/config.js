@@ -39,8 +39,9 @@ export const CONFIG = {
 
   goals: { doors: 60, booked: 4 },
 
-  // Free homeowner and home value lookups from Johnson, Wyandotte and Jackson county parcel maps
-  countyRecords: true,
+  // Free homeowner and home value lookups from Johnson, Wyandotte and Jackson county parcel maps.
+  // Off for the first launch; set to true to turn the Homeowner card, filters and Settings section back on.
+  countyRecords: false,
 
   // "$300K+ homes" filter on the map
   valueFilter: 300000,
