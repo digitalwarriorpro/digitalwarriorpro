@@ -199,6 +199,7 @@ function renderShift() {
 function renderNet() {
   const nb = $("#netbar");
   if (!navigator.onLine) { nb.hidden = false; nb.textContent = outboxN ? `Offline · ${outboxN} change${outboxN > 1 ? "s" : ""} saved on this phone, will send when you have signal` : "Offline · keep knocking, everything saves on this phone"; }
+  else if (sync.enabled && sync.user && !sync.profile && sync.profileError) { nb.hidden = false; nb.textContent = `Not syncing with the team yet${outboxN ? ` · ${outboxN} change${outboxN > 1 ? "s" : ""} saved on this phone` : ""}. ${dbHint(sync.profileError) || "Retrying every minute."}`; }
   else if (outboxN && sync.enabled && sync.user) { nb.hidden = false; nb.textContent = `Sending ${outboxN} change${outboxN > 1 ? "s" : ""}…`; }
   else nb.hidden = true;
 }
@@ -906,9 +907,16 @@ $("#gate").addEventListener("submit", async (e) => {
     }
     if (f === "f-name") {
       const n = $("#g-name").value.trim(); if (!n) return;
-      if (sync.enabled && sync.user) await sync.saveProfile(n);
       rep.name = n; try { localStorage.setItem("knock.repName", n); } catch {}
+      // Saved on the phone first; if the team database is slow or not ready, knocking still starts
+      // and the name is sent again before the next sync.
+      let saveErr = null;
+      if (sync.enabled && sync.user) {
+        const btn = $("#f-name button"); if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+        await sync.saveProfile(n).catch((er) => { saveErr = er; });
+      }
       $("#gate").hidden = true; await boot();
+      if (saveErr) { renderNet(); toast(dbHint(saveErr) || "Saved on this phone. It will sync with the team when the database answers."); }
     }
     if (f === "f-conn") { saveConnection($("#g-url").value, $("#g-key").value); location.reload(); }
     if (f === "f-prop") {
@@ -1033,7 +1041,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { sy
 /* ================= boot ================= */
 let booted = false;
 async function afterSignIn() {
-  const p = await sync.loadProfile().catch(() => null);
+  const p = await Promise.race([sync.loadProfile(), new Promise((r) => setTimeout(r, 8000, null))]).catch(() => null);
   let cached = ""; try { cached = localStorage.getItem("knock.repName") || ""; } catch {}
   const name = p?.name || (!navigator.onLine || !p ? cached : "");
   if (name) {

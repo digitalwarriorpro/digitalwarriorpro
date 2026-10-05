@@ -65,12 +65,21 @@ export const sync = {
     profile = data;
     return profile;
   },
-  async saveProfile(name) {
+  // The rep row is what lets this account write team data. It's retried before every push,
+  // so a slow or failed first save never blocks a rep from knocking.
+  profileError: null,
+  async saveProfile(name, ms = 10000) {
     const row = { id: user.id, name, email: user.email };
-    const { data, error } = await sb.from("reps").upsert(row).select().single();
-    if (error) throw error;
-    profile = data;
-    return profile;
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+    try {
+      const { data, error } = await sb.from("reps").upsert(row).select().abortSignal(ctl.signal).single();
+      if (error) throw error;
+      profile = data; this.profileError = null;
+      return profile;
+    } catch (e) {
+      this.profileError = ctl.signal.aborted ? new Error("The team database didn't answer in time.") : e;
+      throw this.profileError;
+    } finally { clearTimeout(t); }
   },
   async reps() {
     if (!sb || !user) return [];
@@ -100,6 +109,11 @@ export const sync = {
     if (!sb || !user || pushing || !navigator.onLine) return;
     pushing = true;
     try {
+      if (!profile) {
+        let name = ""; try { name = localStorage.getItem("knock.repName") || ""; } catch {}
+        if (!name) return;
+        try { await this.saveProfile(name); } catch { return; }
+      }
       const ops = await store.outbox();
       for (const op of ops) {
         let error = null;
