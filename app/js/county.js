@@ -44,17 +44,17 @@ export const COUNTIES = [
 const FIELD_RULES = {
   owner:   [/^own(er)?_?(name|nm)?1?$/i, /owner.?name/i, /^own.?nam/i, /^owner/i, /taxpayer/i, /^own/i],
   owner2:  [/^own(er)?_?(name|nm)?2$/i, /owner.?name.?2/i],
-  mail:    [/(mail|own(er)?).?(addr|add|adr|street|line1)/i, /^mail/i],
-  mailCity:[/(mail|own(er)?).?(city|cty)/i],
+  mail:    [/^oaline1$/i, /(mail|own(er)?).?(addr|add|adr|street|line1)/i, /^mail/i],
+  mailCity:[/^oaline2$/i, /(mail|own(er)?).?(city|cty)/i],
   mailState:[/(mail|own(er)?).?(state|st)$/i],
-  situs:   [/situs|site.?add|prop(erty)?.?add|parcel.?add|^address$|^addr$|full.?add/i],
+  situs:   [/^saline1$/i, /situs|site.?add|prop(erty)?.?add|parcel.?add|^address$|^addr$|full.?add/i],
   value:   [/(mkt|market).?(val|tot)|(tot|total).?(mkt|market)/i, /apprais.*(tot|val)|(tot|total).?apprais/i, /(tot|total).?(val|value)$/i, /^appr/i, /^(total|tot)_?val/i, /assess.*tot|tot.*assess/i],
   land:    [/land.?(val|mkt|appr)/i],
   impr:    [/(impr|bldg|building).?(val|mkt|appr)/i],
   year:    [/(yr|year).?(blt|built|bui)/i, /^yrblt$/i, /eff.?yr/i],
   sqft:    [/tot_sqf_l_area|sqf.?l.?area/i, /(liv|living|bldg|building|fin|heated).?(area|sq|sf)/i, /^sq.?ft/i, /^sqft/i, /gla$/i],
   beds:    [/bedroom/i, /^beds?$/i],
-  landUse: [/luc_desc|land.?use.?(desc|cd_descr)|^land_use$|use.?desc/i],
+  landUse: [/luc_desc|land.?use.?(desc|cd_descr)|^land_use$|use.?desc/i, /^lbcsstrdsc$/i, /^genlandus1$/i],
   hide:    [/^hidename$/i],
   saleDate:[/(sale|deed|sold).?(dt|date)/i],
   salePrice:[/(sale|sold).?(pr|price|amt|amount|val)/i],
@@ -162,10 +162,15 @@ export async function discover(county, log = () => {}) {
 const EMPTY = (v) => v == null || v === "" || (Array.isArray(v) && !v.length);
 // Queries the best-ranked layers at a point and fills owner / value / year from whichever has them.
 export async function lookupCounty(county, found, lat, lng, titleCase, norm) {
+  const first = await lookupCountyAt(county, found, lat, lng, titleCase, norm, 0);
+  // a pin on the sidewalk or street edge misses the lot polygon; look ~20 m around it
+  return first || lookupCountyAt(county, found, lat, lng, titleCase, norm, 20);
+}
+async function lookupCountyAt(county, found, lat, lng, titleCase, norm, meters) {
   const merged = {}, used = [];
   for (const layer of found.layers.filter((l) => l.score > 0).slice(0, 4)) {
     let attrs = null;
-    try { attrs = await queryPoint(layer, lat, lng); } catch { continue; }
+    try { attrs = await queryPoint(layer, lat, lng, meters); } catch { continue; }
     if (!attrs) continue;
     const info = fromCounty(attrs, layer, county, titleCase, norm);
     let added = false;
@@ -179,8 +184,8 @@ export async function lookupCounty(county, found, lat, lng, titleCase, norm) {
 
 const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[$,]/g, "")); return isFinite(n) && n > 0 ? n : null; };
 
-export async function queryPoint(layer, lat, lng) {
-  const q = `${layer.url}/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=false`;
+export async function queryPoint(layer, lat, lng, meters = 0) {
+  const q = `${layer.url}/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=false${meters ? `&distance=${meters}&units=esriSRUnit_Meter` : ""}`;
   const data = await j(q);
   return data.features?.[0]?.attributes || null;
 }

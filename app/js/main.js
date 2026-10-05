@@ -943,7 +943,7 @@ async function testCounties() {
         let sample = null; try { sample = await queryPoint(l, pt.lat, pt.lng); } catch (e) { sample = { error: e.message }; }
         report[rk].picked.push({ name: l.name, url: l.url, score: l.score, map: l.map, sample: sample && Object.fromEntries(Object.entries(sample).filter(([, v]) => v != null && v !== "" && String(v).trim() !== "")) });
       }
-      const ok = info?.owner && info?.home_value;
+      const ok = info?.owner && (info?.home_value || c.key === "wyandotte");
       rows.push(`<div class="notice ${ok ? "" : "err"}"><strong>${esc(label)}</strong>: ${info ? `${esc(info.owner || "no owner")} · ${info.home_value ? money(info.home_value) : "no value"} · ${info.year_built || "no year"}` : "no parcel at the test point"}
         <br><span class="note">From: ${esc((info?.prop_layers || []).join(" + ") || "—")} · ${found.layers.length} layers checked</span></div>`);
     } catch (e) {

@@ -50,7 +50,7 @@ straight from the counties' own public parcel maps:
 | --- | --- | --- |
 | Jackson County, MO | Owner, mailing address (owner lives here or not), current market value, land use, year built, living sq ft, bedrooms | `Parcel_Information` (current tax roll) + `Parcels_Market_Value` on the county's ArcGIS Online |
 | Wyandotte County, KS | Owner, address, land use, vacant flag. No values or year built are published. | `GISPUB/UGMAPS_4_V02` Parcels |
-| Johnson County, KS | Owner, value, year built, **only in Prairie Village, Mission and Spring Hill**. The countywide property map isn't public. | City parcel maps on `maps.jocogov.org` |
+| Johnson County, KS | Owner, mailing address (owner lives here or not), value, year built, land use, **only in Prairie Village, Mission and Spring Hill**. The countywide property map isn't public. | City parcel maps on `maps.jocogov.org` |
 
 For the rest of Johnson County, import the county's parcel CSV (AIMS sells/offers parcel data) or add a Regrid key.
 Owners who asked the county to hide their name show as "Name withheld by the county".
