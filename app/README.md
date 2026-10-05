@@ -14,22 +14,17 @@ to their home screen.
 1. Create a free project at [supabase.com](https://supabase.com). Region: US Central or US East.
 2. **SQL Editor → New query**: paste all of [`../supabase/schema.sql`](../supabase/schema.sql) and click **Run**.
 3. **Authentication → Sign In / Providers → Email**: turn **off** "Allow new users to sign up". Only people you add can sign in.
-4. **Authentication → Emails → Magic Link** template: replace the body with:
-   ```html
-   <h2>Your Knock sign-in code</h2>
-   <p style="font-size:28px;letter-spacing:4px"><strong>{{ .Token }}</strong></p>
-   ```
-   The app signs in with this 6-digit code instead of a link, because a link opens in the browser
-   instead of the installed home-screen app.
-5. **Authentication → Users → Add user → Create new user** for each rep (Dano, Michael, Kevin, Katie).
-   Enter their email, any password, and tick **Auto Confirm User**.
+4. **Authentication → Users → Add user → Create new user** for each rep (Dano, Michael, Kevin, Katie).
+   Enter their email and a password, and tick **Auto Confirm User**. Reps sign in with that email and password.
+5. Optional backup sign-in: **Authentication → Emails → Magic Link** template, replace the body with
+   `<h2>Your Knock sign-in code</h2><p style="font-size:28px"><strong>{{ .Token }}</strong></p>` so
+   "Email me a code" sends a 6-digit code (a link would open the browser instead of the installed app).
 6. **Project Settings → API**: copy the **Project URL** and the **anon public** key into
    [`js/config.js`](js/config.js) (`supabaseUrl`, `supabaseAnonKey`). The anon key is meant to be public;
    the database only lets signed-in reps read or write.
 
-Supabase's built-in email sender only sends a few emails per hour. That's enough for a 4-person crew
-signing in once each (they stay signed in), but before the crew grows, add your Google Workspace
-mailbox under **Authentication → Emails → SMTP Settings**.
+Supabase's built-in email sender only sends a few emails per hour, which is why reps sign in with a password.
+To make the emailed code dependable, add your Google Workspace mailbox under **Authentication → Emails → SMTP Settings**.
 
 ### 2. Hosting: GitHub Pages (about 5 minutes)
 
@@ -83,7 +78,7 @@ texts and calendar invites), check the `storms` list and the inspection `times`,
 
 1. Open the app link in **Safari** (iPhone) or **Chrome** (Android).
 2. **Share → Add to Home Screen** (iPhone) or **⋮ → Install app** (Android), then open it from the home screen.
-3. Allow location, enter the email Dano added, and type in the 6-digit code from the email.
+3. Allow location, then sign in with the email and password Dano set up.
 
 ### 6. Before heading out (on Wi-Fi)
 

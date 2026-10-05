@@ -824,9 +824,13 @@ function showGate(kind, msg) {
   const c = connection();
   if (kind === "signin") {
     g.innerHTML = `<div class="gate-card"><div class="brand">Dano's Dents <span>Knock</span></div>
-      <h1>Sign in</h1><p class="sub">Use the email Dano added you with. We'll email you a 6-digit code.</p>
+      <h1>Sign in</h1><p class="sub">Use the email and password Dano set up for you.</p>
       ${msg ? `<div class="notice err">${esc(msg)}</div>` : ""}
-      <form id="f-email" class="field"><label for="g-email">Email</label><input type="email" id="g-email" required autocomplete="email" value="${esc(localStorage.getItem("knock.email") || "")}"><button class="btn go" style="margin-top:8px">Email me a code</button></form>
+      <form id="f-pass" class="field"><label for="g-email">Email</label><input type="email" id="g-email" required autocomplete="username" value="${esc(localStorage.getItem("knock.email") || "")}">
+        <label for="g-pass" style="margin-top:8px">Password</label><input type="password" id="g-pass" required autocomplete="current-password">
+        <button class="btn go" style="margin-top:8px">Sign in</button>
+        <button type="button" class="btn link" style="align-self:flex-start;padding:6px 0" data-g="use-code">Forgot password? Email me a code instead</button></form>
+      <form id="f-email" class="field" hidden><label for="g-email2">Email</label><input type="email" id="g-email2" autocomplete="email" value="${esc(localStorage.getItem("knock.email") || "")}"><button class="btn go" style="margin-top:8px">Email me a code</button></form>
       <form id="f-code" class="field" hidden><label for="g-code">6-digit code</label><input type="text" id="g-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8"><button class="btn go" style="margin-top:8px">Sign in</button></form>
       <section><button class="btn link" data-g="local">Use without a team account on this phone</button></section></div>`;
     return;
@@ -871,8 +875,14 @@ $("#gate").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target.id;
   try {
+    if (f === "f-pass") {
+      const email = $("#g-email").value.trim();
+      try { localStorage.setItem("knock.email", email); } catch {}
+      await sync.signInPassword(email, $("#g-pass").value);
+      await afterSignIn();
+    }
     if (f === "f-email") {
-      pendingEmail = $("#g-email").value.trim();
+      pendingEmail = $("#g-email2").value.trim();
       try { localStorage.setItem("knock.email", pendingEmail); } catch {}
       await sync.sendCode(pendingEmail);
       $("#f-email").hidden = true; $("#f-code").hidden = false; $("#g-code").focus();
@@ -895,14 +905,15 @@ $("#gate").addEventListener("submit", async (e) => {
       toast(propSettings.regridToken ? "Property lookups are on" : "Property lookups are off"); showGate("settings");
     }
   } catch (err) {
-    const msg = /not.*found|signups/i.test(err.message) ? "That email isn't on the team yet. Ask Dano to add you." : /expired|invalid/i.test(err.message) ? "That code didn't work. Check it, or request a new one." : err.message;
-    if (f === "f-email" || f === "f-code") showGate("signin", msg); else toast(msg);
+    const msg = /invalid login credentials/i.test(err.message) ? "Email or password is wrong. Check with Dano, or use \"Email me a code\"." : /rate limit/i.test(err.message) ? "Too many code emails right now. Sign in with your password, or try again in an hour." : /not.*found|signups/i.test(err.message) ? "That email isn't on the team yet. Ask Dano to add you." : /expired|invalid/i.test(err.message) ? "That code didn't work. Check it, or request a new one." : err.message;
+    if (f === "f-pass" || f === "f-email" || f === "f-code") showGate("signin", msg); else toast(msg);
   }
 });
 $("#gate").addEventListener("click", async (e) => {
   const g = e.target.closest("[data-g]")?.dataset.g; if (!g) return;
   if (g === "close") { $("#gate").hidden = true; return; }
   if (g === "local") { saveConnection("", ""); location.reload(); return; }
+  if (g === "use-code") { $("#f-pass").hidden = true; $("#f-email").hidden = false; $("#g-email2").value ||= $("#g-email").value; $("#g-email2").focus(); return; }
   if (g === "sync") { await sync.push(); await sync.pull(); toast("Synced"); showGate("settings"); }
   if (g === "signout") { await sync.signOut(); location.reload(); }
   if (g === "lookup-screen") { $("#gate").hidden = true; setTab("map"); lookupOnScreen(); }

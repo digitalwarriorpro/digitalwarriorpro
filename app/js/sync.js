@@ -41,7 +41,13 @@ export const sync = {
     return true;
   },
 
-  // Sign-in is a 6-digit code by email, so it works inside an installed home-screen app.
+  // Sign-in is email + password (set when Dano adds the rep). A 6-digit email code is the backup,
+  // since Supabase's built-in mailer only sends a few emails an hour.
+  async signInPassword(email, password) {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    user = data.user;
+  },
   async sendCode(email) {
     const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
     if (error) throw error;
