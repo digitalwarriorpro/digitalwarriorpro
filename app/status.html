@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Knock status</title>
+<style>
+  :root{color-scheme:dark;--bg:#0B0F14;--card:#141A21;--line:#2A3440;--ink:#E8ECF1;--muted:#93A0AE;--ok:#3FB97A;--bad:#F07167;--warn:#FFB81C}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,sans-serif;padding:calc(16px + env(safe-area-inset-top,0px)) 16px 32px}
+  h1{font-size:22px;margin:0 0 4px}
+  p.sub{color:var(--muted);margin:0 0 16px;font-size:13px}
+  .row{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+  .row b{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:2px}
+  .ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+  button{font:inherit;font-weight:700;border:0;border-radius:11px;padding:12px 16px;width:100%;margin-top:10px;background:#F2A900;color:#141A21}
+  button.danger{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+  a{color:#F2A900}
+</style>
+</head>
+<body>
+<h1>Knock status</h1>
+<p class="sub">Screenshot this page and send it to Marcus. <a href="./">Back to the app</a></p>
+<div id="out"></div>
+<button id="again">Check again</button>
+<button id="reset" class="danger">Reset the app on this phone</button>
+<p class="sub" style="margin-top:8px">Reset signs this phone out and clears its saved app data, including knocks that haven't synced yet. Use it only if Marcus asks.</p>
+<script type="module">
+import { CONFIG } from "./js/config.js";
+const out = document.getElementById("out");
+const row = (label, html) => { const d = document.createElement("div"); d.className = "row"; d.innerHTML = `<b>${label}</b><span>${html}</span>`; out.append(d); return d.querySelector("span"); };
+const ok = (t) => `<span class="ok">✓ ${t}</span>`, bad = (t) => `<span class="bad">✗ ${t}</span>`, warn = (t) => `<span class="warn">! ${t}</span>`;
+const timed = async (url, opts = {}, ms = 10000) => {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms); const t0 = performance.now();
+  try { const res = await fetch(url, { ...opts, signal: ctl.signal, cache: "no-store" }); return { res, ms: Math.round(performance.now() - t0) }; }
+  catch (e) { return { err: ctl.signal.aborted ? `no answer in ${ms / 1000}s` : (e.message || "failed"), ms: Math.round(performance.now() - t0) }; }
+  finally { clearTimeout(t); }
+};
+const ls = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+
+async function run() {
+  out.innerHTML = "";
+  row("Time", new Date().toLocaleString());
+  row("App version on this page", `Version ${CONFIG.appVersion}`);
+  const sw = await timed("sw.js?x=" + Date.now());
+  const served = sw.res?.ok ? ((await sw.res.text()).match(/knock-v(\d+)/) || [])[1] : null;
+  row("Version Netlify is serving", served ? (served === CONFIG.appVersion ? ok(`Version ${served}`) : warn(`Version ${served} (this page is ${CONFIG.appVersion})`)) : bad(sw.err || `HTTP ${sw.res?.status}`));
+  const keys = await (self.caches?.keys?.() ?? Promise.resolve([])).catch(() => []);
+  row("Versions saved on this phone", keys.filter((k) => k.startsWith("knock-v")).join(", ") || "none");
+  row("Opened from", matchMedia("(display-mode: standalone)").matches || navigator.standalone ? "Home-screen app" : "Browser tab");
+  row("Signal", navigator.onLine ? ok("online") : bad("offline"));
+
+  const mode = ls("knock.sbUrl");
+  const url = mode === "off" ? "" : (mode || CONFIG.supabaseUrl), key = ls("knock.sbKey") || CONFIG.supabaseAnonKey;
+  row("Team database setting", mode === "off" ? warn("This phone is in single-phone mode") : url ? ok(url.replace("https://", "")) : bad("not set"));
+  const tokenKey = Object.keys(localStorage).find((k) => /^sb-.*-auth-token$/.test(k));
+  let session = null; try { session = tokenKey && JSON.parse(localStorage.getItem(tokenKey)); } catch {}
+  row("Signed in on this phone", session?.user?.email ? ok(session.user.email) : warn("no"));
+  row("Name saved on this phone", ls("knock.repName") || warn("none"));
+  if (!url || !key) return;
+
+  const h = { apikey: key, Authorization: `Bearer ${key}` };
+  const health = await timed(`${url}/auth/v1/health`, { headers: h });
+  row("Supabase sign-in service", health.res?.ok ? ok(`up (${health.ms} ms)`) : bad(health.err || `HTTP ${health.res.status}`));
+  for (const t of ["reps", "doors", "visits", "app_settings"]) {
+    const r = await timed(`${url}/rest/v1/${t}?select=*&limit=1`, { headers: h });
+    let msg;
+    if (r.err) msg = bad(r.err);
+    else if (r.res.ok) msg = ok(`table exists (${r.ms} ms)`);
+    else { const body = await r.res.text().catch(() => ""); msg = /PGRST205|42P01|does not exist|Could not find the table/i.test(body) ? bad("table missing: run schema.sql") : bad(`HTTP ${r.res.status} ${body.slice(0, 120)}`); }
+    row(`Table: ${t}`, msg);
+  }
+  if (session?.access_token) {
+    const me = await timed(`${url}/rest/v1/reps?select=name&id=eq.${session.user.id}`, { headers: { apikey: key, Authorization: `Bearer ${session.access_token}` } });
+    const rows = me.res?.ok ? await me.res.json().catch(() => null) : null;
+    row("Your rep record", me.err ? bad(me.err) : !me.res.ok ? warn(`HTTP ${me.res.status} (sign-in may have expired)`) : rows?.length ? ok(rows[0].name) : warn("not saved yet"));
+  }
+}
+document.getElementById("again").onclick = run;
+document.getElementById("reset").onclick = async () => {
+  if (!confirm("Reset the app on this phone? You'll need to sign in again.")) return;
+  try { localStorage.clear(); } catch {}
+  try { for (const k of await caches.keys()) await caches.delete(k); } catch {}
+  try { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); } catch {}
+  try { indexedDB.deleteDatabase("knock"); } catch {}
+  location.href = "./";
+};
+run();
+</script>
+</body>
+</html>

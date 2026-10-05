@@ -822,7 +822,7 @@ function renderToday() {
 /* ================= settings / sign-in gate ================= */
 function showGate(kind, msg) {
   const g = $("#gate"); g.hidden = false;
-  queueMicrotask(() => { const card = g.querySelector(".gate-card"); if (card && !card.querySelector(".ver")) card.insertAdjacentHTML("beforeend", `<p class="ver">Version ${CONFIG.appVersion}</p>`); });
+  queueMicrotask(() => { const card = g.querySelector(".gate-card"); if (card && !card.querySelector(".ver")) card.insertAdjacentHTML("beforeend", `<p class="ver">Version ${CONFIG.appVersion} · <a href="status.html">Check connection</a></p>`); });
   const c = connection();
   if (kind === "signin") {
     g.innerHTML = `<div class="gate-card"><div class="brand">Dano's Dents <span>Knock</span></div>
@@ -912,13 +912,12 @@ $("#gate").addEventListener("submit", async (e) => {
       rep.name = n; try { localStorage.setItem("knock.repName", n); } catch {}
       // Saved on the phone first; if the team database is slow or not ready, knocking still starts
       // and the name is sent again before the next sync.
-      let saveErr = null;
+      // Into the map first, nothing awaited; the team database gets the name in the background.
+      $("#gate").hidden = true;
       if (sync.enabled && sync.user) {
-        const btn = $("#f-name button"); if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
-        await sync.saveProfile(n).catch((er) => { saveErr = er; });
+        sync.saveProfile(n).then(() => renderNet()).catch((er) => { renderNet(); toast(dbHint(er) || "Saved on this phone. It will sync with the team when the database answers."); });
       }
-      $("#gate").hidden = true; await boot();
-      if (saveErr) { renderNet(); toast(dbHint(saveErr) || "Saved on this phone. It will sync with the team when the database answers."); }
+      await boot();
     }
     if (f === "f-conn") { saveConnection($("#g-url").value, $("#g-key").value); location.reload(); }
     if (f === "f-prop") {

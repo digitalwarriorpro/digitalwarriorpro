@@ -220,5 +220,6 @@ h2{font-family:var(--display);font-weight:700;font-stretch:85%;font-size:18px;ma
 .gate{position:fixed;inset:0;z-index:3000;background:var(--bg);overflow-y:auto;display:flex;justify-content:center;padding:calc(24px + env(safe-area-inset-top,0px)) 16px 24px}
 .gate-card{width:100%;max-width:440px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:14px;align-self:flex-start}
 .gate-card .ver{margin:0;font-size:11px;color:var(--muted);text-align:center}
+.gate-card .ver a{color:var(--muted)}
 .gate-card section{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:14px}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(40px)}}}
