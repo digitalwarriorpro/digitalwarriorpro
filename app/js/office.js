@@ -3,6 +3,7 @@
 import { CONFIG } from "./config.js";
 import { sync } from "./sync.js";
 import { toCsv } from "./addresses.js";
+import { totals, usd, newDoc, nextNumber, linesFromVehicles, statusAfterPayments, STATUS_LABEL, printHtml } from "./billing.js";
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -21,7 +22,8 @@ const stageLabel = (k) => ALL_STAGES.find((s) => s.key === k)?.label || k;
 const OUTCOME = { nothome: "Not home", no: "Not interested", back: "Come back", lead: "Lead · wants quote", booked: "Inspection booked", dnk: "Do not knock", none: "Not knocked" };
 
 let sb = null, me = { id: null, name: "" };
-let doors = new Map(), jobs = new Map(), tasks = [], reps = [], periodVisits = [];
+let doors = new Map(), jobs = new Map(), tasks = [], reps = [], periodVisits = [], docs = [];
+let editDoc = null, billFilter = "open";
 let view = "pipeline", q = "", repFilter = "", period = "30", openId = null, showLost = false;
 
 /* ---------- data ---------- */
@@ -38,17 +40,19 @@ function matchesFilters(d) {
 async function loadAll() {
   const since = period === "all" ? "2000-01-01" : new Date(Date.now() - (period === "today" ? 0 : Number(period)) * 86400000).toLocaleDateString("en-CA", { timeZone: CONFIG.timeZone });
   const sinceIso = new Date(`${since}T00:00:00`).toISOString();
-  const [jr, dr, tr, vr, rr] = await Promise.all([
+  const [jr, dr, tr, vr, rr, kr] = await Promise.all([
     sb.from("jobs").select("*"),
     sb.from("doors").select("*").in("status", ["lead", "booked", "back"]),
     sb.from("tasks").select("*").order("due", { ascending: true, nullsFirst: false }),
     sb.from("visits").select("id,door_id,rep_name,outcome,at").gte("at", sinceIso).limit(20000),
     sync.reps(),
+    sb.from("documents").select("*").order("created_at", { ascending: false }),
   ]);
   for (const r of [jr, dr, tr, vr]) if (r.error) throw r.error;
+  docs = kr.error ? [] : kr.data; // before schema.sql adds the table, billing just shows empty
   jobs = new Map(jr.data.map((j) => [j.door_id, j]));
   doors = new Map(dr.data.map((d) => [d.id, d]));
-  const missing = [...jobs.keys()].filter((id) => !doors.has(id));
+  const missing = [...new Set([...jobs.keys(), ...docs.map((k) => k.door_id)])].filter((id) => !doors.has(id));
   if (missing.length) {
     const { data } = await sb.from("doors").select("*").in("id", missing);
     (data || []).forEach((d) => doors.set(d.id, d));
@@ -97,7 +101,7 @@ function render() {
   $("#task-badge").hidden = !open; $("#task-badge").textContent = open;
   const sel = $("#rep-filter"), names = [...new Set([...reps.map((r) => r.name), ...[...doors.values()].map((d) => d.updated_by_name)].filter(Boolean))].sort();
   sel.innerHTML = `<option value="">All reps</option>${names.map((n) => `<option ${n === repFilter ? "selected" : ""}>${esc(n)}</option>`).join("")}`;
-  $("#main").innerHTML = view === "pipeline" ? pipelineView() : view === "contacts" ? contactsView() : view === "tasks" ? tasksView() : reportsView();
+  $("#main").innerHTML = view === "pipeline" ? pipelineView() : view === "contacts" ? contactsView() : view === "tasks" ? tasksView() : view === "billing" ? billingView() : reportsView();
 }
 
 function card(d) {
@@ -261,6 +265,11 @@ function renderDrawer() {
       ${d.notes ? `<p><span class="muted">Field notes:</span> ${esc(d.notes)}</p>` : ""}
     </div>
 
+    <div class="sec"><div class="label">Estimates and invoices</div>
+      ${docs.filter((k) => k.door_id === d.id).map(docRow).join("") || `<p class="muted">None yet.</p>`}
+      <div class="inline" style="margin-top:6px"><button class="btn small" data-act="new-estimate">New estimate</button><button class="btn small" data-act="new-invoice">New invoice</button></div>
+    </div>
+
     <div class="sec"><div class="label">Tasks</div>
       ${dTasks.map(taskRow).join("") || `<p class="muted">No tasks.</p>`}
       <form class="inline" id="f-task"><input id="t-title" placeholder="Add a task" required><input id="t-due" type="date" value="${today()}" style="flex:0 0 150px"><button class="btn">Add</button></form>
@@ -271,6 +280,138 @@ function renderDrawer() {
         <div class="field"><textarea id="n-body" placeholder="What happened? e.g. Talked to Mike, adjuster coming Thursday" required></textarea></div><div><button class="btn">Log ${noteKind}</button></div></form>
       <div class="timeline">${events.map((e) => `<div class="ev"><time>${esc(fmtWhen(e.at))}</time><div><span class="kind">${esc(e.kind)}</span>${e.field ? ' <span class="muted">· field</span>' : ""}${e.who ? ` <span class="muted">· ${esc(e.who)}</span>` : ""}${e.body ? `<div>${esc(e.body)}</div>` : ""}</div></div>`).join("") || `<p class="muted">Loading…</p>`}</div>
     </div>`;
+}
+
+/* ---------- billing ---------- */
+const kindLabel = (k) => (k.kind === "invoice" ? "Invoice" : "Estimate");
+function docRow(k) {
+  const t = totals(k), d = doors.get(k.door_id);
+  return `<div class="task" data-doc="${k.id}" style="cursor:pointer"><div class="t-main"><div class="t-title"><b>${esc(kindLabel(k))} ${esc(k.number)}</b> · ${usd(t.total)}</div>
+    <div class="t-sub">${esc(STATUS_LABEL[k.status] || k.status)}${k.kind === "invoice" && t.paid && t.balance > 0 ? ` · ${usd(t.balance)} due` : ""} · ${esc(fmtDate(k.issued))}${view === "billing" && d ? ` · ${esc(d.name || d.address)}` : ""}</div></div></div>`;
+}
+function billingView() {
+  const month = today().slice(0, 7);
+  const inv = docs.filter((k) => k.kind === "invoice" && k.status !== "void");
+  const outstanding = inv.reduce((t, k) => t + Math.max(0, totals(k).balance), 0);
+  const invoicedMonth = inv.filter((k) => (k.issued || "").startsWith(month)).reduce((t, k) => t + totals(k).total, 0);
+  const collectedMonth = inv.reduce((t, k) => t + (k.payments || []).filter((p) => (p.date || "").startsWith(month)).reduce((a, p) => a + (Number(p.amount) || 0), 0), 0);
+  const openEst = docs.filter((k) => k.kind === "estimate" && ["draft", "sent"].includes(k.status));
+  const overdue = inv.filter((k) => k.due && k.due < today() && totals(k).balance > 0 && k.status !== "draft");
+  const list = docs.filter((k) => {
+    const d = doors.get(k.door_id);
+    if (q && ![k.number, d?.name, d?.address, d?.phone].join(" ").toLowerCase().includes(q.toLowerCase())) return false;
+    if (billFilter === "open") return k.kind === "estimate" ? ["draft", "sent"].includes(k.status) : !["paid", "void"].includes(k.status);
+    if (billFilter === "estimates") return k.kind === "estimate";
+    if (billFilter === "invoices") return k.kind === "invoice";
+    return true;
+  });
+  return `<div class="kpis">
+      <div class="kpi"><div class="v">${usd(outstanding)}</div><div class="k">Unpaid invoices${overdue.length ? ` · <b style="color:var(--bad)">${overdue.length} overdue</b>` : ""}</div></div>
+      <div class="kpi"><div class="v">${usd(invoicedMonth)}</div><div class="k">Invoiced this month</div></div>
+      <div class="kpi"><div class="v">${usd(collectedMonth)}</div><div class="k">Collected this month</div></div>
+      <div class="kpi"><div class="v">${usd(openEst.reduce((t, k) => t + totals(k).total, 0))}</div><div class="k">${openEst.length} open estimate${openEst.length === 1 ? "" : "s"}</div></div>
+    </div>
+    <div class="row-actions"><div class="period">${[["open", "Open"], ["estimates", "Estimates"], ["invoices", "Invoices"], ["all", "All"]].map(([k, l]) => `<button data-bill="${k}" aria-pressed="${billFilter === k}">${l}</button>`).join("")}</div>
+      <span class="muted">Create estimates and invoices from a job: open it in Pipeline or Contacts.</span></div>
+    <div class="table-wrap"><table><thead><tr><th>#</th><th>Customer</th><th>Issued</th><th>Due</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th></tr></thead><tbody>
+      ${list.map((k) => { const t = totals(k), d = doors.get(k.door_id), late = k.kind === "invoice" && k.due && k.due < today() && t.balance > 0 && !["draft", "void"].includes(k.status);
+        return `<tr data-doc="${k.id}"><td><b>${esc(k.number)}</b><div class="muted">${esc(kindLabel(k))}</div></td><td>${esc(d?.name || d?.address || "")}</td><td>${esc(fmtDate(k.issued))}</td>
+          <td ${late ? 'style="color:var(--bad);font-weight:700"' : ""}>${esc(fmtDate(k.due))}${late ? " · overdue" : ""}</td><td>${esc(STATUS_LABEL[k.status] || k.status)}</td>
+          <td class="num">${usd(t.total)}</td><td class="num">${k.kind === "invoice" ? usd(t.balance) : ""}</td></tr>`; }).join("") || `<tr><td colspan="7" class="muted">Nothing here yet.</td></tr>`}
+    </tbody></table></div>`;
+}
+
+function openDoc(doc) { editDoc = JSON.parse(JSON.stringify(doc)); renderDoc(); $("#docmodal").hidden = false; }
+function closeDoc() { editDoc = null; $("#docmodal").hidden = true; $("#docmodal").innerHTML = ""; }
+function startDoc(kind, fromEstimate) {
+  const d = doors.get(fromEstimate?.door_id || openId);
+  openDoc(newDoc(kind, { door: d, job: jobs.get(d.id), docs, today: today(), by: me.name, fromEstimate }));
+  if (!editDoc.lines.length) toast("No damaged panels logged for this customer, so add the lines yourself.");
+}
+function docTotalsHtml() {
+  const t = totals(editDoc), inv = editDoc.kind === "invoice";
+  return `<div><span>Subtotal</span><b>${usd(t.subtotal)}</b></div>${t.discount ? `<div><span>Discount</span><b>−${usd(t.discount)}</b></div>` : ""}${t.tax ? `<div><span>Tax</span><b>${usd(t.tax)}</b></div>` : ""}
+    <div class="grand"><span>Total</span><b>${usd(t.total)}</b></div>
+    ${inv ? `<div><span>Paid</span><b>${usd(t.paid)}</b></div><div class="grand"><span>Balance due</span><b>${usd(t.balance)}</b></div>` : ""}
+    ${t.deductible !== null ? `<div class="muted"><span>Insurance pays</span><b>${usd(t.insurance)}</b></div><div class="muted"><span>Customer deductible</span><b>${usd(t.deductible)}</b></div>` : ""}`;
+}
+function renderDoc() {
+  const k = editDoc, d = doors.get(k.door_id), inv = k.kind === "invoice";
+  const statuses = inv ? ["draft", "sent", "void"] : ["draft", "sent", "accepted", "declined"];
+  const auto = inv && ["partial", "paid"].includes(k.status);
+  $("#docmodal").innerHTML = `<div class="doc-card">
+    <div class="d-head"><div><h2>${inv ? "Invoice" : "Estimate"} ${esc(k.number)}</h2><div class="muted">${esc(d?.name || "")} · ${esc(d?.address || "")}</div></div><button class="x" data-act="close-doc" aria-label="Close">×</button></div>
+    <div class="fields" style="grid-template-columns:repeat(4,1fr);margin-top:12px">
+      <div class="field"><label>Status</label>${auto ? `<input value="${esc(STATUS_LABEL[k.status])}" disabled>` : `<select data-doc-f="status">${statuses.map((x) => `<option value="${x}" ${x === k.status ? "selected" : ""}>${STATUS_LABEL[x]}</option>`).join("")}</select>`}</div>
+      <div class="field"><label>${inv ? "Issued" : "Date"}</label><input type="date" data-doc-f="issued" value="${esc(k.issued)}"></div>
+      <div class="field"><label>${inv ? "Due" : "Valid until"}</label><input type="date" data-doc-f="due" value="${esc(k.due || "")}"></div>
+      <div class="field"><label>Number</label><input data-doc-f="number" value="${esc(k.number)}"></div>
+    </div>
+    <table class="lines"><thead><tr><th>Description</th><th class="num" style="width:80px">Qty</th><th class="num" style="width:120px">Price</th><th class="num" style="width:110px">Amount</th><th style="width:36px"></th></tr></thead><tbody>
+      ${k.lines.map((l, i) => `<tr><td><input data-line="${i}" data-lf="desc" value="${esc(l.desc)}" placeholder="e.g. 2021 Ford F-150: Hood, paintless dent repair"></td>
+        <td><input data-line="${i}" data-lf="qty" type="number" step="any" min="0" value="${esc(l.qty)}" class="num"></td>
+        <td><input data-line="${i}" data-lf="price" type="number" step="0.01" value="${esc(l.price)}" class="num"></td>
+        <td class="num" data-amt="${i}">${usd((Number(l.qty) || 0) * (Number(l.price) || 0))}</td><td><button class="x" style="font-size:20px" data-act="del-line" data-i="${i}" aria-label="Remove line">×</button></td></tr>`).join("")}
+    </tbody></table>
+    <div class="inline" style="margin:8px 0 14px"><button class="btn small" data-act="add-line">Add line</button><button class="btn small" data-act="fill-lines">Fill from damage logged</button></div>
+    <div class="doc-bottom"><div class="fields" style="grid-template-columns:1fr 1fr 1fr;align-content:start">
+        <div class="field"><label>Discount ($)</label><input type="number" min="0" step="0.01" data-doc-f="discount" value="${esc(k.discount || 0)}"></div>
+        <div class="field"><label>Tax rate (%)</label><input type="number" min="0" step="0.001" data-doc-f="tax_rate" value="${esc(k.tax_rate || 0)}"></div>
+        <div class="field"><label>Customer deductible ($)</label><input type="number" min="0" step="0.01" data-doc-f="deductible" value="${esc(k.deductible ?? "")}" placeholder="if insurance pays"></div>
+        <div class="field wide"><label>Notes for the customer</label><textarea data-doc-f="notes">${esc(k.notes || "")}</textarea></div>
+        <div class="field wide"><label>Terms</label><textarea data-doc-f="terms">${esc(k.terms || "")}</textarea></div>
+      </div><div class="doc-totals" id="doc-totals">${docTotalsHtml()}</div></div>
+    ${inv ? `<div class="sec"><div class="label">Payments</div>
+      ${(k.payments || []).map((p, i) => `<div class="task"><div class="t-main"><b>${usd(p.amount)}</b> · ${esc(p.method || "")} · ${esc(fmtDate(p.date))}${p.note ? ` · ${esc(p.note)}` : ""}</div><button class="x" style="font-size:20px" data-act="del-pay" data-i="${i}" aria-label="Remove payment">×</button></div>`).join("") || `<p class="muted">No payments yet.</p>`}
+      <div class="inline pay-form"><input type="date" id="pay-date" value="${today()}" style="flex:0 0 150px"><input type="number" id="pay-amt" step="0.01" min="0" placeholder="Amount" value="${Math.max(0, totals(k).balance) || ""}" style="flex:0 0 120px">
+        <select id="pay-method">${CONFIG.billing.paymentMethods.map((m) => `<option>${esc(m)}</option>`).join("")}</select><input id="pay-note" placeholder="Check # / note"><button class="btn small" data-act="add-pay">Record payment</button></div></div>` : ""}
+    <div class="doc-actions"><button class="btn go" data-act="save-doc">Save</button><button class="btn" data-act="print-doc">Print / PDF</button>
+      ${d?.email ? `<button class="btn" data-act="email-doc">Email</button>` : ""}${digits(d?.phone) ? `<button class="btn" data-act="text-doc">Text</button>` : ""}
+      ${!inv && k.id ? `<button class="btn" data-act="to-invoice">Convert to invoice</button>` : ""}
+      ${k.id && k.status === "draft" ? `<button class="btn danger" data-act="del-doc">Delete draft</button>` : ""}</div>
+  </div>`;
+}
+async function saveDoc(quiet) {
+  const k = editDoc, before = docs.find((x) => x.id === k.id);
+  k.lines = k.lines.filter((l) => String(l.desc).trim() || Number(l.price));
+  k.status = statusAfterPayments(k);
+  const row = { ...k }; delete row.created_at; delete row.updated_at;
+  for (const f of ["discount", "tax_rate"]) row[f] = Number(row[f]) || 0;
+  row.deductible = row.deductible === "" || row.deductible === null || row.deductible === undefined ? null : Number(row.deductible);
+  row.due = row.due || null;
+  let res = await sb.from("documents").upsert(row).select().single();
+  if (res.error && /23505|duplicate/i.test(res.error.code + res.error.message) && !k.id) { row.number = nextNumber(docs, k.kind); res = await sb.from("documents").upsert(row).select().single(); }
+  if (res.error) throw res.error;
+  const saved = res.data;
+  docs = [saved, ...docs.filter((x) => x.id !== saved.id)];
+  editDoc = JSON.parse(JSON.stringify(saved));
+  // Keep the job in step: accepted estimates and invoices set the job value; a paid invoice moves the job to Paid
+  const t = totals(saved), label = `${kindLabel(saved)} ${saved.number}`;
+  const was = before?.status;
+  if (saved.kind === "estimate" && saved.status === "accepted" && was !== "accepted") { await saveJob(saved.door_id, { value: t.total }); await addNote(saved.door_id, "note", `${label} accepted · ${usd(t.total)}`); }
+  if (saved.kind === "invoice" && !before) await saveJob(saved.door_id, { value: t.total });
+  if (saved.status === "sent" && was !== "sent" && saved.kind) await addNote(saved.door_id, "note", `${label} marked sent · ${usd(t.total)}`);
+  if (saved.kind === "invoice" && saved.status === "paid" && was !== "paid") {
+    await saveJob(saved.door_id, { value: t.total, ...(CONFIG.pipeline.some((s) => s.key === "paid") ? { stage: "paid", stage_changed_at: new Date().toISOString() } : {}) });
+    await addNote(saved.door_id, "note", `${label} paid in full · ${usd(t.total)}`);
+  }
+  if (!quiet) toast(`${label} saved`);
+  render(); if (openId) renderDrawer();
+  return saved;
+}
+function printDoc() {
+  const d = doors.get(editDoc.door_id);
+  const f = document.createElement("iframe");
+  f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  f.srcdoc = printHtml(editDoc, d, jobs.get(d.id));
+  f.onload = () => { const img = f.contentDocument.querySelector("img"); const go = () => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 60000); }; img && !img.complete ? (img.onload = img.onerror = go) : go(); };
+  document.body.append(f);
+}
+function docMessage() {
+  const k = editDoc, d = doors.get(k.door_id), t = totals(k), first = (d?.name || "").split(" ")[0] || "there";
+  return k.kind === "invoice"
+    ? `Hi ${first}, here is invoice ${k.number} from ${CONFIG.company} for ${usd(t.total)}${t.paid ? ` (balance ${usd(t.balance)})` : ""}${k.due ? `, due ${fmtDate(k.due)}` : ""}. Thank you for your business!`
+    : `Hi ${first}, here is estimate ${k.number} from ${CONFIG.company} for your hail repair: ${usd(t.total)}${t.deductible !== null ? ` (your deductible ${usd(t.deductible)}, insurance ${usd(t.insurance)})` : ""}. Reply with any questions or to schedule the repair.`;
 }
 
 /* ---------- events ---------- */
@@ -284,11 +425,40 @@ document.addEventListener("click", async (e) => {
   if (act === "close" || t.id === "scrim") return closeJob();
   if (act === "toggle-lost") { showLost = !showLost; return render(); }
   if (act === "export") return exportCsv();
+  const bill = t.closest("[data-bill]"); if (bill) { billFilter = bill.dataset.bill; return render(); }
+  if (act === "new-estimate" || act === "new-invoice") return startDoc(act === "new-invoice" ? "invoice" : "estimate");
+  if (act === "close-doc") return closeDoc();
+  if (editDoc && act) {
+    try {
+      if (act === "add-line") { editDoc.lines.push({ desc: "", qty: 1, price: 0 }); renderDoc(); $(`[data-line="${editDoc.lines.length - 1}"][data-lf="desc"]`)?.focus(); }
+      if (act === "del-line") { editDoc.lines.splice(+t.closest("[data-i]").dataset.i, 1); renderDoc(); }
+      if (act === "fill-lines") { const add = linesFromVehicles(doors.get(editDoc.door_id)?.vehicles); if (!add.length) toast("No damaged panels logged for this customer."); editDoc.lines.push(...add); renderDoc(); }
+      if (act === "add-pay") {
+        const amount = Number($("#pay-amt").value); if (!amount) return toast("Enter the payment amount");
+        editDoc.payments = [...(editDoc.payments || []), { date: $("#pay-date").value || today(), amount, method: $("#pay-method").value, note: $("#pay-note").value.trim() }];
+        await saveDoc(true); await addNote(editDoc.door_id, "note", `Payment ${usd(amount)} · ${$("#pay-method")?.value || ""} on ${editDoc.number}`.trim()); renderDoc(); toast("Payment recorded");
+      }
+      if (act === "del-pay") { if (!confirm("Remove this payment?")) return; editDoc.payments.splice(+t.closest("[data-i]").dataset.i, 1); await saveDoc(true); renderDoc(); }
+      if (act === "save-doc") { await saveDoc(); renderDoc(); }
+      if (act === "print-doc") { await saveDoc(true); renderDoc(); printDoc(); }
+      if (act === "email-doc" || act === "text-doc") {
+        if (editDoc.status === "draft") editDoc.status = "sent";
+        await saveDoc(true); renderDoc();
+        const d = doors.get(editDoc.door_id), msg = docMessage();
+        if (act === "email-doc") { location.href = `mailto:${encodeURIComponent(d.email)}?subject=${encodeURIComponent(`${kindLabel(editDoc)} ${editDoc.number} from ${CONFIG.company}`)}&body=${encodeURIComponent(msg + "\n\n(PDF attached)")}`; toast("Email opened. Use Print / PDF to save the PDF and attach it."); }
+        else location.href = `sms:${digits(d.phone)}&body=${encodeURIComponent(msg)}`;
+      }
+      if (act === "to-invoice") { const est = await saveDoc(true); const existing = docs.find((x) => x.kind === "invoice" && x.from_estimate === est.id); if (existing) { toast(`Already invoiced as ${existing.number}`); return openDoc(existing); } closeDoc(); startDoc("invoice", est); }
+      if (act === "del-doc") { if (!confirm(`Delete draft ${editDoc.number}?`)) return; const { error } = await sb.from("documents").delete().eq("id", editDoc.id); if (error) throw error; docs = docs.filter((x) => x.id !== editDoc.id); closeDoc(); render(); if (openId) renderDrawer(); }
+    } catch (er) { toast(errText(er)); }
+    return;
+  }
+  const docEl = t.closest("[data-doc]"); if (docEl) { const k = docs.find((x) => x.id === docEl.dataset.doc); if (k) openDoc(k); return; }
   if (act === "signout") { await sync.signOut(); location.reload(); return; }
   const c = t.closest(".card, tbody tr[data-id]"); if (c && !t.closest("a")) openJob(c.dataset.id);
 });
 $("#scrim").addEventListener("click", closeJob);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && openId) closeJob(); });
+document.addEventListener("keydown", (e) => { if (e.key !== "Escape") return; if (editDoc) closeDoc(); else if (openId) closeJob(); });
 document.addEventListener("change", async (e) => {
   const t = e.target;
   if (t.id === "j-stage") return setStage(openId, t.value);
@@ -302,6 +472,14 @@ document.addEventListener("change", async (e) => {
   }
 });
 $("#q").addEventListener("input", (e) => { q = e.target.value.trim(); render(); });
+// Document editor: fields update in place and the totals follow as you type
+document.addEventListener("input", (e) => {
+  const t = e.target; if (!editDoc || !t.closest("#docmodal")) return;
+  if (t.dataset.line != null) { const l = editDoc.lines[+t.dataset.line]; l[t.dataset.lf] = t.dataset.lf === "desc" ? t.value : t.value === "" ? "" : Number(t.value); const a = $(`[data-amt="${t.dataset.line}"]`); if (a) a.textContent = usd((Number(l.qty) || 0) * (Number(l.price) || 0)); }
+  else if (t.dataset.docF) editDoc[t.dataset.docF] = t.value;
+  else return;
+  $("#doc-totals").innerHTML = docTotalsHtml();
+});
 document.addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target.id, num = (id) => { const v = $(id).value.trim(); return v === "" ? null : Number(v); };
@@ -365,7 +543,8 @@ async function afterSignIn() {
   render();
   sb.channel("office").on("postgres_changes", { event: "*", schema: "public", table: "doors" }, scheduleReload)
     .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, scheduleReload)
-    .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, scheduleReload).subscribe();
+    .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, scheduleReload)
+    .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, scheduleReload).subscribe();
   setInterval(scheduleReload, 60000);
 }
 (async function start() {

@@ -1,7 +1,7 @@
 -- Dano's Dents Knock: database health check. Changes nothing.
 -- Supabase → SQL Editor → New query → paste all of this → Run. Every row should say PASS.
 with
-t(name) as (values ('reps'), ('doors'), ('visits'), ('app_settings'), ('jobs'), ('tasks'), ('notes')),
+t(name) as (values ('reps'), ('doors'), ('visits'), ('app_settings'), ('jobs'), ('tasks'), ('notes'), ('documents')),
 need_cols(col) as (values ('id'), ('lat'), ('lng'), ('address'), ('status'), ('attempts'), ('vehicles'), ('name'), ('phone'),
   ('email'), ('consent'), ('slot'), ('notes'), ('storm'), ('photos'), ('updated_by'), ('updated_by_name'), ('driveway'),
   ('owner'), ('home_value'), ('beds'), ('owner_hidden'), ('roof_squares'))

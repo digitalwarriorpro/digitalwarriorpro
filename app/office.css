@@ -125,6 +125,22 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .inline{display:flex;gap:6px}
 .inline input{flex:1}
 
+/* Estimate / invoice editor */
+.docmodal{position:fixed;inset:0;z-index:50;background:rgba(10,15,20,.45);overflow-y:auto;padding:24px 16px}
+.doc-card{max-width:900px;margin:0 auto;background:var(--surface);border-radius:14px;padding:20px 22px 22px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.lines{margin-top:14px}
+.lines td{padding:4px 6px;vertical-align:middle}
+.lines input{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:7px 8px}
+.lines input.num{text-align:right}
+.doc-bottom{display:grid;grid-template-columns:1fr 280px;gap:18px;align-items:start}
+.doc-totals{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.doc-totals div{display:flex;justify-content:space-between}
+.doc-totals .grand{font-size:16px;border-top:1px solid var(--line);padding-top:6px;margin-top:2px}
+.doc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+.pay-form{margin-top:6px;flex-wrap:wrap}
+.pay-form input,.pay-form select{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:7px 8px}
+@media (max-width:700px){.doc-bottom{grid-template-columns:1fr}.lines th:nth-child(4),.lines td:nth-child(4){display:none}}
+
 /* Sign-in */
 .gate{max-width:380px;margin:60px auto;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px}
 .gate h1{font-family:var(--display);font-stretch:85%;margin:0 0 6px}

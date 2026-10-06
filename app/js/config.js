@@ -3,7 +3,7 @@
 // limits every table to signed-in reps.
 export const CONFIG = {
   // Shown on the sign-in, name and settings screens; keep in step with VERSION in sw.js
-  appVersion: "22",
+  appVersion: "23",
   // Supabase project (Project Settings → API). Leave blank to run in single-phone mode.
   supabaseUrl: "https://dwkayufjpthvovchvsta.supabase.co",
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3a2F5dWZqcHRodm92Y2h2c3RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3MTIwOTksImV4cCI6MjEwNjI4ODA5OX0.Vd596wo3PnPc14kqQCAK_h0EKh1jqUOVaR757xFeoA0",
@@ -65,6 +65,19 @@ export const CONFIG = {
     { key: "done", label: "Repair done" },
     { key: "paid", label: "Paid" },
   ],
+
+  // Estimates and invoices (office.html). "Fill from vehicles" prices each damaged panel at its base price
+  // times the severity factor, as a starting point to edit. Set these to the shop's real prices.
+  billing: {
+    panelPrices: { Hood: 450, Roof: 750, Trunk: 350, "L doors": 400, "R doors": 400, "L fender": 250, "R fender": 250, Glass: 0 },
+    severity: { Light: 0.6, Moderate: 1, Severe: 1.6 },
+    taxRate: 0, // percent; confirm with your accountant whether repair labor is taxable where you work
+    estimateValidDays: 30,
+    invoiceDueDays: 15,
+    estimateTerms: "Estimate based on visible damage; hidden damage found during repair will be quoted before work continues. Valid 30 days.",
+    invoiceTerms: "Payment due on completion. Insurance payments are applied to the balance; the customer is responsible for the deductible and anything insurance does not cover.",
+    paymentMethods: ["Insurance check", "Card", "Cash", "Check", "Zelle", "Venmo"],
+  },
 
   // Roofing tools: roof size estimate on each door (for the roofing version). Off for PDR crews;
   // Settings has a preview switch for one phone.

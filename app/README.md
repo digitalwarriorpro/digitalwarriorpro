@@ -132,7 +132,19 @@ Open `https://<your-app-address>/office.html` on a computer and sign in with the
 - **Reports:** knocks, conversations, leads, bookings and conversion for today / 7 / 30 days / all time, the
   pipeline's value by stage, and a per-rep table.
 
-Office data lives in `jobs`, `tasks` and `notes`, separate from the doors the phones sync, so a phone that was
+- **Estimates and invoices** (job page → *New estimate* / *New invoice*, and the **Billing** tab):
+  - *Fill from damage logged* turns each damaged panel the rep marked into a priced line: base price × severity
+    (`config.js → billing.panelPrices` and `billing.severity`; **set these to the shop's real prices**). Every line is editable.
+  - Discount, tax rate and the customer's **deductible**, which splits the total into "insurance pays" and "customer pays".
+  - Status: draft → sent → accepted / declined for estimates; invoices go partly paid → paid as payments are recorded
+    (insurance check, card, cash, check, Zelle, Venmo; list in `billing.paymentMethods`).
+  - **Print / PDF** gives a branded page with the logo; use "Save as PDF" in the print window to attach it.
+    **Email** and **Text** open a ready-written message to the customer.
+  - *Convert to invoice* copies an estimate. An accepted estimate sets the job value; an invoice paid in full moves the
+    job to **Paid**. Each step is logged in the job's activity.
+  - The Billing tab shows unpaid invoices (overdue in red), invoiced and collected this month, and open estimates.
+
+Office data lives in `jobs`, `tasks`, `notes` and `documents`, separate from the doors the phones sync, so a phone that was
 offline can never overwrite an office edit. Updates from the field appear within seconds.
 
 ## Limits to know
@@ -164,7 +176,8 @@ js/county.js               Free county parcel lookups (Johnson, Wyandotte, Jacks
 js/property.js             Lookup routing (county first, Regrid fallback) and county CSV columns
 js/config.js               Team settings (Supabase keys, shop, storms, slots, tiles)
 sw.js, manifest.webmanifest  Offline support and home-screen install
-office.html, office.css, js/office.js  Office CRM: pipeline, job page, tasks, contacts, reports
+office.html, office.css, js/office.js  Office CRM: pipeline, job page, tasks, contacts, billing, reports
+js/billing.js              Estimate and invoice math, line items from logged damage, printable page
 js/roof.js                 Roof size estimate from the map's building outline (roofing version)
 status.html                Connection and database check for a phone
 vendor/                    Leaflet 1.9.4 and supabase-js 2.45.4, bundled so the app never depends on a CDN

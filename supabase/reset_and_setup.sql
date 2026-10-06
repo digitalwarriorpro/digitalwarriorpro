@@ -4,6 +4,7 @@
 -- Supabase → SQL Editor → New query → paste all of this → Run.
 
 drop view if exists public.leads, public.rep_activity;
+drop table if exists public.documents cascade;
 drop table if exists public.notes cascade;
 drop table if exists public.tasks cascade;
 drop table if exists public.jobs cascade;
@@ -269,3 +270,34 @@ left join public.jobs j on j.door_id = d.id
 where d.status in ('booked', 'lead', 'back') or j.door_id is not null
 order by (d.status = 'booked') desc, d.updated_at desc;
 grant select on public.leads to authenticated;
+
+-- Estimates and invoices (office). One row per document; line items and payments as JSON.
+create table if not exists public.documents (
+  id uuid primary key default gen_random_uuid(),
+  door_id text not null references public.doors(id) on delete cascade,
+  kind text not null check (kind in ('estimate','invoice')),
+  number text not null,
+  status text not null default 'draft' check (status in ('draft','sent','accepted','declined','partial','paid','void')),
+  issued date not null default current_date,
+  due date,
+  lines jsonb not null default '[]',      -- [{desc, qty, price}]
+  discount numeric not null default 0,
+  tax_rate numeric not null default 0,    -- percent
+  deductible numeric,                     -- customer's share when insurance pays the rest
+  payments jsonb not null default '[]',   -- [{date, amount, method, note}]
+  notes text default '',
+  terms text default '',
+  from_estimate uuid,
+  created_by_name text default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists documents_door on public.documents (door_id);
+create unique index if not exists documents_number on public.documents (kind, number);
+drop trigger if exists documents_touch on public.documents;
+create trigger documents_touch before insert or update on public.documents for each row execute function public.touch_updated_at();
+alter table public.documents enable row level security;
+drop policy if exists documents_all on public.documents;
+create policy documents_all on public.documents for all to authenticated using (public.is_rep()) with check (public.is_rep());
+grant select, insert, update, delete on public.documents to authenticated;
+do $$ begin alter publication supabase_realtime add table public.documents; exception when duplicate_object then null; end $$;
