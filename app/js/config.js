@@ -54,6 +54,10 @@ export const CONFIG = {
   // Off for the first launch; set to true to turn the Homeowner card, filters and Settings section back on.
   countyRecords: false,
 
+  // Roofing tools: roof size estimate on each door (for the roofing version). Off for PDR crews;
+  // Settings has a preview switch for one phone.
+  roofEstimates: false,
+
   // "$300K+ homes" filter on the map
   valueFilter: 300000,
 };

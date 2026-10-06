@@ -6,6 +6,7 @@ import { lookupProperty, propertyEnabled, money, titleCase, norm } from "./prope
 import { COUNTIES, discover, queryPoint, lookupCounty } from "./county.js";
 import { cleanVin, vinStatus, decodeVin, recallsFor } from "./vehicles.js";
 import { hailFor, hailAt, inHailArea, hailColor, inches } from "./storms.js";
+import { roofAt, atPitch, PITCHES } from "./roof.js";
 
 /* ================= constants ================= */
 const S = {
@@ -64,6 +65,8 @@ function saveCountyLayers() {
   if (sync.enabled && sync.user) sync.setTeamSetting("county_layers_v4", v).catch(() => {});
 }
 const lookingUp = new Set();
+const ROOF_FIELDS = ["roof_base_sqft", "roof_footprint_sqft", "roof_sqft", "roof_squares", "roof_pitch", "roof_source", "roof_building_id", "roof_checked_at"];
+const roofOn = () => { try { return CONFIG.roofEstimates || localStorage.getItem("knock.roofPreview") === "1"; } catch { return !!CONFIG.roofEstimates; } };
 const PROP_FIELDS = ["owner", "owner_occupied", "mailing_address", "home_value", "value_type", "year_built", "sqft", "last_sale_date", "last_sale_price", "parcel_id", "land_use", "prop_source", "prop_checked_at"];
 
 /* ================= slots ================= */
@@ -286,6 +289,45 @@ function head(d, editable) {
       <div class="addr-sub">${esc([d.city, d.zip].filter(Boolean).join(", ") || "Kansas City metro")} · <span class="pill" style="font-size:12px"><i style="background:${colorOf(d.status)}"></i>${S[d.status].l}</span>${editable && sheet !== "edit-addr" ? ` · <button class="btn link" style="padding:0;font-size:12px" data-a="edit-addr">Edit address</button>` : ""}</div></div>
     <button class="x" data-a="close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" stroke-width="2" fill="none"><path d="M2 2l10 10M12 2 2 12"/></svg></button></div>`;
 }
+/* ================= roof size (roofing version) ================= */
+let roofLayer = null; const roofBusy = new Set();
+function roofInfo(d) {
+  if (!roofOn()) return "";
+  if (roofBusy.has(d.id)) return `<div class="home"><div class="label">Roof size</div><p class="note">Measuring the building outline…</p></div>`;
+  if (!d.roof_checked_at) return `<div class="home"><div class="label">Roof size</div><button class="btn" data-a="roof">Estimate roof size</button><p class="note">From the building outline on the map. Free; about ±15%.</p></div>`;
+  if (!d.roof_sqft) return `<div class="home"><div class="label">Roof size</div><p class="note">No building outline on the map at this spot. <button class="btn link" style="padding:0" data-a="roof">Try again</button></p></div>`;
+  const w = atPitch(d.roof_base_sqft, d.roof_pitch || 6);
+  return `<div class="home"><div class="label">Roof size <span class="note">· estimate</span></div>
+    <div class="stats"><div><b>${w.squares_with_waste}</b><span>Squares w/ 10% waste</span></div><div><b>${w.roof_sqft.toLocaleString()}</b><span>Roof sq ft</span></div><div><b>${Number(d.roof_footprint_sqft).toLocaleString()}</b><span>Footprint</span></div></div>
+    <div class="label" style="margin-top:8px">Pitch</div>
+    <div class="chips">${PITCHES.map((p) => `<button class="chip" data-a="pitch" data-v="${p}" aria-pressed="${(d.roof_pitch || 6) === p}">${p}/12</button>`).join("")}</div>
+    <p class="note">From the map's building outline plus a 1 ft overhang. Use a measured report (EagleView, Hover) before ordering material.</p></div>`;
+}
+function showRoofOutline(outline) {
+  if (!roofLayer) roofLayer = L.layerGroup().addTo(map);
+  roofLayer.clearLayers();
+  if (outline) L.polygon(outline, { color: cssVar("--accent"), weight: 3, fillOpacity: 0.15, interactive: false }).addTo(roofLayer);
+}
+async function measureRoof(d) {
+  if (roofBusy.has(d.id)) return;
+  if (!navigator.onLine) return toast("Roof estimates need signal.");
+  roofBusy.add(d.id); renderSheet();
+  try {
+    const r = await roofAt(d.lat, d.lng, { pitch: d.roof_pitch || 6 });
+    const cur = doors.get(d.id) || d;
+    Object.assign(cur, r ? { roof_base_sqft: r.base_sqft, roof_footprint_sqft: r.footprint_sqft, roof_sqft: r.roof_sqft, roof_squares: r.squares_with_waste, roof_pitch: r.pitch, roof_source: "Map building outline", roof_building_id: r.building_id }
+      : { roof_base_sqft: null, roof_footprint_sqft: null, roof_sqft: null, roof_squares: null, roof_source: "" }, { roof_checked_at: nowIso() });
+    showRoofOutline(r?.outline);
+    await saveDoor(cur);
+  } catch (e) { toast(e.message); }
+  finally { roofBusy.delete(d.id); renderSheet(); }
+}
+async function setPitch(d, p) {
+  const w = atPitch(d.roof_base_sqft, p);
+  Object.assign(d, { roof_pitch: p, roof_sqft: w.roof_sqft, roof_squares: w.squares_with_waste });
+  await saveDoor(d); renderSheet();
+}
+
 /* ================= storm layer ================= */
 function hailFact(d) {
   const h = hailAt(stormData, d); if (!h) return "";
@@ -491,7 +533,7 @@ function renderSheet() {
     }
     host.innerHTML = `<div class="sheet peek" role="dialog" aria-label="${esc(d.address)}"><div class="sheet-scroll"><div class="grab"></div>${head(d, true)}
       ${sheet === "edit-addr" ? `<div class="row"><button class="btn go" data-a="save-addr">Save address</button><button class="btn" data-a="peek">Cancel</button></div>` : ""}
-      ${facts(d)}${driveway(d)}${homeInfo(d)}${body}${history(d)}</div></div>`;
+      ${facts(d)}${driveway(d)}${homeInfo(d)}${roofInfo(d)}${body}${history(d)}</div></div>`;
     loadPhotos();
     return;
   }
@@ -658,6 +700,8 @@ $("#sheet-host").addEventListener("click", async (e) => {
   if (a === "addveh") { draft.vehicles.push({ ymm: "", vin: "", panels: [], sev: "", insurer: "", claim: "" }); return renderSheet(); }
   if (a === "do-import") return doImport();
   if (a === "lookup") { lookupDoor(sel).catch(() => {}); return; }
+  if (a === "roof") return measureRoof(sel);
+  if (a === "pitch") return setPitch(sel, +t.dataset.v);
   if (t.dataset.vin != null) return lookupVin(+t.dataset.vin);
   if (t.dataset.dn != null || t.dataset.dt) {
     const d = sel, dw = { ...(d.driveway || { types: [] }) };
@@ -692,7 +736,10 @@ async function saveFlow() {
   const d = sel, before = clone(d);
   const wasOpen = ["none", "nothome", "back"].includes(d.status);
   // keep owner info that arrived while the rep was filling in the flow
-  const props = d.prop_checked_at ? Object.fromEntries(PROP_FIELDS.map((k) => [k, d[k]])) : {};
+  const props = {
+    ...(d.prop_checked_at ? Object.fromEntries(PROP_FIELDS.map((k) => [k, d[k]])) : {}),
+    ...(d.roof_checked_at ? Object.fromEntries(ROOF_FIELDS.map((k) => [k, d[k]])) : {}),
+  };
   Object.assign(d, draft, props);
   d.vehicles = (d.vehicles || []).filter((v) => v.ymm || v.panels.length || v.insurer);
   if (d.status !== "booked") d.slot = null;
@@ -831,8 +878,9 @@ function exportCsv() {
     notes: d.notes, source: "Door knock", turf: d.turf, rep: d.updated_by_name, updated: d.updated_at,
     owner_on_record: d.owner, owner_lives_here: d.owner_occupied == null ? "" : d.owner_occupied ? "yes" : "no", owner_mailing: d.mailing_address,
     home_value: d.home_value || "", year_built: d.year_built || "", sqft: d.sqft || "", last_sale: [fmtSale(d.last_sale_date), d.last_sale_price || ""].filter(Boolean).join(" "), parcel: d.parcel_id,
+    roof_squares: d.roof_squares || "", roof_pitch: d.roof_squares ? `${d.roof_pitch}/12` : "",
   }));
-  const csv = toCsv(rows, ["status", "name", "phone", "email", "contact_pref", "ok_to_text", "address", "city", "zip", "storm_date", "inspection", "come_back", "reason", "vehicles", "notes", "cars_outside", "source", "turf", "rep", "updated", "owner_on_record", "owner_lives_here", "owner_mailing", "home_value", "year_built", "sqft", "last_sale", "parcel"]);
+  const csv = toCsv(rows, ["status", "name", "phone", "email", "contact_pref", "ok_to_text", "address", "city", "zip", "storm_date", "inspection", "come_back", "reason", "vehicles", "notes", "cars_outside", "source", "turf", "rep", "updated", "owner_on_record", "owner_lives_here", "owner_mailing", "home_value", "year_built", "sqft", "last_sale", "parcel", "roof_squares", "roof_pitch"]);
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   a.download = `danos-dents-leads-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -911,6 +959,9 @@ function showGate(kind, msg) {
       <div id="county-test"></div>
       <details><summary class="note" style="cursor:pointer">Other counties (Clay, Platte, Cass…): Regrid paid API</summary>
       <form id="f-prop" class="field" style="margin-top:8px"><label for="g-regrid">Regrid API token (optional)</label><input type="text" id="g-regrid" value="${esc(propSettings.regridToken)}" autocomplete="off" placeholder="Paste token"><button class="btn" style="margin-top:8px">Save${sync.enabled && sync.user ? " for the whole team" : " on this phone"}</button></form></details></section>` : ""}
+    <section><div class="label">Roofing tools (preview)</div>
+      <p class="note">Roof size estimates on each door, for the roofing version of the app. ${CONFIG.roofEstimates ? "On for this company." : "Turn on to preview them on this phone only."}</p>
+      ${CONFIG.roofEstimates ? "" : `<div class="row"><button class="btn" data-g="roof-preview">${roofOn() ? "Turn off roof estimates" : "Turn on roof estimates"}</button></div>`}</section>
     <section><div class="label">Add doors from a list</div>
       <p class="note">CSV with columns address, lat, lng. Optional: owner, mailing address, home value, year built, sqft, sale date, sale price, parcel, plus city, zip, name, phone, notes. Works with county parcel exports and Hail Recon lists.</p>
       <label class="btn" for="csv-in">Choose CSV file</label></section>
@@ -991,6 +1042,7 @@ $("#gate").addEventListener("click", async (e) => {
   if (g === "close") { $("#gate").hidden = true; return; }
   if (g === "local") { saveConnection("", ""); location.reload(); return; }
   if (g === "team") { try { localStorage.removeItem("knock.sbUrl"); localStorage.removeItem("knock.sbKey"); } catch {} location.reload(); return; }
+  if (g === "roof-preview") { try { localStorage.setItem("knock.roofPreview", roofOn() ? "0" : "1"); } catch {} toast(roofOn() ? "Roof estimates on" : "Roof estimates off"); renderSheet(); return showGate("settings"); }
   if (g === "use-code") { $("#f-pass").hidden = true; $("#f-email").hidden = false; $("#g-email2").value ||= $("#g-email").value; $("#g-email2").focus(); return; }
   if (g === "sync") { await sync.push(); await sync.pull(); toast("Synced"); showGate("settings"); }
   if (g === "signout") { await sync.signOut(); location.reload(); }

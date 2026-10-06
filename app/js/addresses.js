@@ -28,7 +28,7 @@ export async function addressesInView(bounds, limit = 800) {
 
 // The free address servers are often busy (429/504, or a dropped connection that Safari reports as
 // "Load failed"), so try each server in turn with a time limit.
-async function overpass(q) {
+export async function overpass(q) {
   if (!navigator.onLine) throw new Error("No signal. Load doors when you have signal, or drop doors with +.");
   for (const url of CONFIG.overpassUrls) {
     const ctl = new AbortController();

@@ -3,7 +3,7 @@
 const VERSION = "knock-v21";
 const SHELL = [
   "./", "index.html", "styles.css", "manifest.webmanifest", "icon-32.png", "icon-180.png", "icon-192.png", "icon-512.png",
-  "js/main.js", "js/config.js", "js/store.js", "js/sync.js", "js/addresses.js", "js/property.js", "js/county.js", "js/vehicles.js", "js/storms.js",
+  "js/main.js", "js/config.js", "js/store.js", "js/sync.js", "js/addresses.js", "js/property.js", "js/county.js", "js/vehicles.js", "js/storms.js", "js/roof.js",
   "vendor/leaflet/leaflet.css", "vendor/leaflet/leaflet.js", "vendor/supabase.js", "vendor/591.supabase.js",
 ];
 const TILE_CACHE = "knock-tiles";

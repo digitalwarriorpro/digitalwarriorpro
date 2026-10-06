@@ -178,3 +178,13 @@ group by 1, 2
 order by 1 desc, booked desc, knocks desc;
 
 grant select on public.leads, public.rep_activity to authenticated;
+
+-- Roof size estimate (roofing version): from the map's building outline
+alter table public.doors add column if not exists roof_base_sqft numeric;
+alter table public.doors add column if not exists roof_footprint_sqft int;
+alter table public.doors add column if not exists roof_sqft int;
+alter table public.doors add column if not exists roof_squares numeric;
+alter table public.doors add column if not exists roof_pitch int;
+alter table public.doors add column if not exists roof_source text default '';
+alter table public.doors add column if not exists roof_building_id text default '';
+alter table public.doors add column if not exists roof_checked_at timestamptz;
