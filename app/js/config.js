@@ -3,7 +3,7 @@
 // limits every table to signed-in reps.
 export const CONFIG = {
   // Shown on the sign-in, name and settings screens; keep in step with VERSION in sw.js
-  appVersion: "20",
+  appVersion: "21",
   // Supabase project (Project Settings → API). Leave blank to run in single-phone mode.
   supabaseUrl: "https://dwkayufjpthvovchvsta.supabase.co",
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3a2F5dWZqcHRodm92Y2h2c3RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3MTIwOTksImV4cCI6MjEwNjI4ODA5OX0.Vd596wo3PnPc14kqQCAK_h0EKh1jqUOVaR757xFeoA0",
@@ -13,6 +13,9 @@ export const CONFIG = {
   shopAddress: "",
   shopPhone: "",
 
+  // Storm layer: hail reports inside this box, and warnings from these NWS offices (EAX = Kansas City/Pleasant Hill)
+  stormArea: { west: -95.3, east: -93.9, south: 38.5, north: 39.6 },
+  stormOffices: ["EAX"],
   // Storm a door was worked under. Saved on every door for the master lead sheet.
   storms: ["2026-08-19", "2026-08-18", "2026-06-01", "2026-04-15", "2026-03-11", "2026-03-10"],
 

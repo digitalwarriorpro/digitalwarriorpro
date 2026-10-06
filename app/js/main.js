@@ -5,6 +5,7 @@ import { addressesInView, reverseLookup, parseCsv, toCsv } from "./addresses.js"
 import { lookupProperty, propertyEnabled, money, titleCase, norm } from "./property.js";
 import { COUNTIES, discover, queryPoint, lookupCounty } from "./county.js";
 import { cleanVin, vinStatus, decodeVin, recallsFor } from "./vehicles.js";
+import { hailFor, hailAt, inHailArea, hailColor, inches } from "./storms.js";
 
 /* ================= constants ================= */
 const S = {
@@ -97,7 +98,7 @@ function newDoor(base) {
   };
 }
 const isMine = (d) => !d.assigned_to || d.assigned_to === rep.name;
-const matches = (d, f = filter) => f === "all" ? true : f === "mine" ? isMine(d) : f === "todo" ? d.status === "none" : f === "revisit" ? (d.status === "back" || d.status === "nothome") : f === "leads" ? (d.status === "lead" || d.status === "booked") : f === "owners" ? d.owner_occupied === true : f === "value" ? (d.home_value || 0) >= CONFIG.valueFilter : f === "cars" ? (d.driveway?.count || 0) > 0 : true;
+const matches = (d, f = filter) => f === "all" ? true : f === "mine" ? isMine(d) : f === "todo" ? d.status === "none" : f === "revisit" ? (d.status === "back" || d.status === "nothome") : f === "leads" ? (d.status === "lead" || d.status === "booked") : f === "owners" ? d.owner_occupied === true : f === "value" ? (d.home_value || 0) >= CONFIG.valueFilter : f === "cars" ? (d.driveway?.count || 0) > 0 : f === "hail" ? inHailArea(stormData, d) : true;
 function dist(a, b) {
   const R = 6371e3, t = Math.PI / 180;
   const dLat = (b.lat - a.lat) * t, dLng = (b.lng - a.lng) * t;
@@ -108,7 +109,8 @@ const fmtDist = (m) => { const ft = m * 3.281; return ft < 1000 ? `${Math.round(
 const origin = () => me || (map ? { lat: map.getCenter().lat, lng: map.getCenter().lng } : CONFIG.startView);
 function nextDoor(excludeId) {
   const o = origin();
-  const pool = [...doors.values()].filter((d) => d.id !== excludeId && isMine(d));
+  // With the Hail area filter on, walk only the doors inside it
+  const pool = [...doors.values()].filter((d) => d.id !== excludeId && isMine(d) && (filter !== "hail" || inHailArea(stormData, d)));
   const pick = (st) => pool.filter((d) => d.status === st).sort((a, b) => dist(o, a) - dist(o, b))[0];
   const n = pick("none") || pick("back");
   return n && dist(o, n) < 3000 ? n : null;
@@ -134,10 +136,14 @@ async function kick() { outboxN = await store.outboxCount(); renderNet(); sync.p
 
 /* ================= map ================= */
 let map, layer, meMarker, meAcc, watchId = null;
+// Storm layer: hail warnings and reports for one storm date
+let stormLayer, stormOn = false, stormData = null, stormBusy = false;
+let stormDate = (() => { try { return localStorage.getItem("knock.stormDate") || CONFIG.storms[0]; } catch { return CONFIG.storms[0]; } })();
 const markers = new Map();
 function initMap() {
   map = L.map("map", { zoomControl: false, preferCanvas: true, attributionControl: true }).setView([CONFIG.startView.lat, CONFIG.startView.lng], CONFIG.startView.zoom);
   L.tileLayer(CONFIG.tiles.url, { maxZoom: CONFIG.tiles.maxZoom, attribution: CONFIG.tiles.attribution, crossOrigin: "" }).addTo(map);
+  stormLayer = L.layerGroup().addTo(map); // under the doors
   layer = L.layerGroup().addTo(map);
   map.on("dragstart", () => { if (follow) { follow = false; renderCtrls(); } });
   map.on("zoomend", () => markers.forEach((m, id) => paintDoor(doors.get(id))));
@@ -208,7 +214,7 @@ const ownerData = () => propertyEnabled(propSettings) || [...doors.values()].som
 function renderFilters() {
   const all = [...doors.values()];
   const n = (f) => all.filter((d) => matches(d, f)).length;
-  $("#filters").innerHTML = [["all", "All"], ["mine", "My turf"], ["todo", "To knock"], ["revisit", "Revisit"], ["leads", "Leads"], ["cars", "Cars outside"], ...(ownerData() ? [["owners", "Owner lives here"], ["value", `${money(CONFIG.valueFilter)}+ homes`]] : [])]
+  $("#filters").innerHTML = [["all", "All"], ["mine", "My turf"], ["todo", "To knock"], ["revisit", "Revisit"], ["leads", "Leads"], ["cars", "Cars outside"], ...(stormData ? [["hail", "Hail area"]] : []), ...(ownerData() ? [["owners", "Owner lives here"], ["value", `${money(CONFIG.valueFilter)}+ homes`]] : [])]
     .map(([k, l]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l} <span class="n">${n(k)}</span></button>`).join("");
   document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === mode));
   $("#walk").hidden = mode !== "list";
@@ -280,9 +286,53 @@ function head(d, editable) {
       <div class="addr-sub">${esc([d.city, d.zip].filter(Boolean).join(", ") || "Kansas City metro")} · <span class="pill" style="font-size:12px"><i style="background:${colorOf(d.status)}"></i>${S[d.status].l}</span>${editable && sheet !== "edit-addr" ? ` · <button class="btn link" style="padding:0;font-size:12px" data-a="edit-addr">Edit address</button>` : ""}</div></div>
     <button class="x" data-a="close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" stroke-width="2" fill="none"><path d="M2 2l10 10M12 2 2 12"/></svg></button></div>`;
 }
+/* ================= storm layer ================= */
+function hailFact(d) {
+  const h = hailAt(stormData, d); if (!h) return "";
+  const parts = [];
+  if (h.warned) parts.push(`warned ${h.warned.size ? inches(h.warned.size) + " hail" : h.warned.kind.toLowerCase()}`);
+  if (h.near && h.near.size) parts.push(`${inches(h.near.size)} reported ${h.near.miles < 0.1 ? "here" : h.near.miles.toFixed(1) + " mi away"}`);
+  return parts.length ? `<span class="fact hail">Hail ${esc(stormLabel(stormDate))}: ${esc(parts.join(" · "))}</span>` : "";
+}
+async function loadStorm(force = false) {
+  stormBusy = true; renderStorm();
+  try { stormData = await hailFor(stormDate, { force }); }
+  catch (e) { stormData = null; toast(e.message); }
+  stormBusy = false; renderStorm(); paintAll(); renderAll();
+}
+function renderStorm() {
+  const bar = $("#stormbar");
+  $("[data-c=storm]").setAttribute("aria-pressed", stormOn);
+  stormLayer.clearLayers();
+  bar.hidden = !stormOn;
+  if (!stormOn) return;
+  const d = stormData;
+  if (d) {
+    for (const w of [...d.warnings].sort((a, b) => a.size - b.size)) {
+      L.polygon(w.ring, { color: hailColor(w.size || 0.75), weight: 1.5, fillColor: hailColor(w.size || 0.75), fillOpacity: 0.16, interactive: false }).addTo(stormLayer);
+    }
+    for (const r of d.reports) {
+      L.circleMarker([r.lat, r.lng], { radius: 5 + Math.min(r.size, 3) * 3, color: "#fff", weight: 2, fillColor: hailColor(r.size), fillOpacity: 0.95, interactive: false }).addTo(stormLayer);
+    }
+  }
+  const max = d ? Math.max(0, ...d.reports.map((r) => r.size), ...d.warnings.map((w) => w.size)) : 0;
+  const summary = stormBusy ? "Loading storm data…" : !d ? "No storm data loaded" :
+    !d.reports.length && !d.warnings.length ? "No hail reports or warnings around KC that day" :
+    `${d.reports.length} hail report${d.reports.length === 1 ? "" : "s"} · ${d.warnings.length} warning area${d.warnings.length === 1 ? "" : "s"}${max ? ` · up to ${inches(max)}` : ""}`;
+  bar.innerHTML = `<div class="storm-row"><select id="storm-date" aria-label="Storm date">${CONFIG.storms.map((s) => `<option value="${s}" ${s === stormDate ? "selected" : ""}>${esc(stormLabel(s))}</option>`).join("")}</select>
+    <button class="x" data-c="storm" aria-label="Hide storm layer">×</button></div>
+    <div class="storm-sum">${esc(summary)}</div>
+    <div class="storm-key"><span><i style="background:${hailColor(0.75)}"></i>&lt;1″</span><span><i style="background:${hailColor(1)}"></i>1″+</span><span><i style="background:${hailColor(1.75)}"></i>1.75″+</span><span><i style="background:${hailColor(2.5)}"></i>2.5″+</span><span>▢ warned area · ● report</span></div>`;
+}
+document.addEventListener("change", (e) => {
+  if (e.target.id !== "storm-date") return;
+  stormDate = e.target.value; try { localStorage.setItem("knock.stormDate", stormDate); } catch {}
+  loadStorm();
+});
 function facts(d) {
   return `<div class="facts">
     <span class="fact hot">Storm ${esc(stormLabel(d.storm))}</span>
+    ${hailFact(d)}
     <span class="fact">${d.attempts ? `${d.attempts} visit${d.attempts > 1 ? "s" : ""}` : "First visit"}</span>
     ${d.hanger ? `<span class="fact">Door hanger left</span>` : ""}
     ${d.assigned_to ? `<span class="fact">${esc(d.turf ? d.turf + " · " : "")}${esc(d.assigned_to)}</span>` : ""}
@@ -684,12 +734,15 @@ document.querySelector(".overlay-top").addEventListener("click", (e) => {
   const m = e.target.closest("[data-mode]"); if (m) { mode = m.dataset.mode; renderAll(); return; }
   const f = e.target.closest("[data-f]"); if (f) { filter = f.dataset.f; paintAll(); renderAll(); }
 });
-$("#ctrls").addEventListener("click", (e) => {
+const onCtrl = (e) => {
   const c = e.target.closest("[data-c]")?.dataset.c; if (!c) return;
   if (c === "me") { follow = true; if (me) map.setView([me.lat, me.lng], Math.max(map.getZoom(), 17)); else toast("Waiting for GPS…"); renderCtrls(); }
   if (c === "load") loadInView();
+  if (c === "storm") { stormOn = !stormOn; if (stormOn) loadStorm(); else { stormData = null; if (filter === "hail") filter = "all"; renderStorm(); paintAll(); renderAll(); } }
   if (c === "add") { adding = !adding; if (adding) closeSheet(); renderCtrls(); renderNext(); }
-});
+};
+$("#ctrls").addEventListener("click", onCtrl);
+$("#stormbar").addEventListener("click", onCtrl);
 $("#nextbar").addEventListener("click", async (e) => {
   if (e.target.closest("#go-next")) { const nx = nextDoor(sel?.id); if (nx) openPeek(nx.id); }
   if (e.target.closest("#go-load")) loadInView();

@@ -107,6 +107,11 @@ texts and calendar invites), check the `storms` list and the inspection `times`,
   and tap **Look up**. NHTSA's free database fills in year, make, model and trim, and lists recalls on file for
   that model year. The app catches typos (wrong length, I/O/Q, bad check digit). Needs signal; the VIN is
   saved either way.
+- **Hail layer** (cloud button under **+**): pick a storm date to see NWS severe-storm warning areas shaded by the
+  hail size they called for, and hail reports (spotters, police, NWS) as dots sized by stone size. The **Hail area**
+  filter keeps doors inside a warning or within a mile of a 1"+ report, and **Next door** walks only those. Each
+  door card shows what hit nearby. Free, from the Iowa Environmental Mesonet's copy of NWS data; each date is saved
+  on the phone after it loads once. Area and NWS office are `stormArea` / `stormOffices` in `config.js`.
 - **Undo** appears for 6 seconds after every save.
 - **Leads** lists bookings, quotes and come-backs (yours or the whole team's) and exports a CSV for the
   master lead sheet. **Today** shows your doors, bookings, rate per hour and the crew board.
@@ -137,6 +142,7 @@ js/store.js                On-phone database (IndexedDB) and outbox
 js/sync.js                 Supabase sign-in, push/pull, live updates
 js/addresses.js            OpenStreetMap address lookups and CSV import/export
 js/vehicles.js             VIN check digit, NHTSA VIN decode and recall lookups
+js/storms.js               Hail layer: NWS hail reports and warning polygons for a storm date
 js/county.js               Free county parcel lookups (Johnson, Wyandotte, Jackson): layer discovery and field mapping
 js/property.js             Lookup routing (county first, Regrid fallback) and county CSV columns
 js/config.js               Team settings (Supabase keys, shop, storms, slots, tiles)
@@ -147,3 +153,17 @@ vendor/                    Leaflet 1.9.4 and supabase-js 2.45.4, bundled so the 
 
 To run it locally: `npx http-server app -p 8080`, then open `http://localhost:8080`. Without Supabase keys it
 runs in single-phone mode, with everything kept on that device.
+
+## Roadmap: storm data and other trades
+
+- **Radar hail swaths (next):** NOAA MRMS MESH (maximum estimated hail size, every 2 minutes, archived on AWS since
+  2020) converted nightly into KC-metro swath polygons by a free scheduled job, shown in the same hail layer. Adds the
+  continuous swaths that the report points and warning boxes approximate. NOAA SWDI `nx3hail` radar hail cells
+  (size and probability) can fill in between reports.
+- **Hail Recon:** ask for an address or parcel export (CSV) or API access; CSV imports work today through
+  **Add doors from a list**.
+- **Roofing and other contractor versions:** same app with a per-company config. Home values come back on
+  (`countyRecords: true`). Roof size options, cheapest first: building footprint area from the map's building
+  outlines × a pitch factor (free, about ±15%), Google Solar API building insights (roof area and pitch per segment,
+  pay-as-you-go with a free monthly allowance), and EagleView or Hover reports ordered per booked job (paid, accurate).
+
