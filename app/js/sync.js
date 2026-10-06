@@ -33,6 +33,7 @@ export function saveConnection(url, key) {
 
 export const sync = {
   get enabled() { return !!sb; },
+  get client() { return sb; },
   get user() { return user; },
   get profile() { return profile; },
   on(evt, fn) { handlers[evt] = fn; },

@@ -143,24 +143,8 @@ grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.reps, public.doors, public.visits, public.app_settings to authenticated;
 grant execute on function public.is_rep() to authenticated;
 
--- CRM views for Dano: every lead and booking in one list, and each rep's activity by day.
+-- CRM views for Dano: each rep's activity by day here; the leads list is defined with the office CRM tables below.
 -- security_invoker keeps the same row-level security as the tables.
-create or replace view public.leads with (security_invoker = true) as
-select
-  case d.status when 'booked' then 'Booked' when 'lead' then 'Lead' when 'back' then 'Come back' end as stage,
-  d.slot as inspection,
-  d.name as customer, d.phone, d.email, d.contact_pref, d.consent as ok_to_text,
-  d.address, d.city, d.zip,
-  jsonb_array_length(d.vehicles) as vehicles,
-  (select string_agg(concat_ws(' · ', nullif(v->>'ymm', ''), nullif((select string_agg(p, ', ') from jsonb_array_elements_text(coalesce(v->'panels', '[]')) p), ''), nullif(v->>'sev', '')), '; ')
-     from jsonb_array_elements(d.vehicles) v) as damage,
-  (select string_agg(distinct v->>'insurer', ', ') from jsonb_array_elements(d.vehicles) v where coalesce(v->>'insurer', '') <> '') as insurers,
-  d.back_when, d.notes, d.storm, d.turf,
-  d.updated_by_name as rep, d.updated_at as last_update, d.id as door_id
-from public.doors d
-where d.status in ('booked', 'lead', 'back')
-order by (d.status = 'booked') desc, d.updated_at desc;
-
 create or replace view public.rep_activity with (security_invoker = true) as
 select
   (v.at at time zone 'America/Chicago')::date as day,
@@ -177,7 +161,7 @@ from public.visits v
 group by 1, 2
 order by 1 desc, booked desc, knocks desc;
 
-grant select on public.leads, public.rep_activity to authenticated;
+grant select on public.rep_activity to authenticated;
 
 -- Roof size estimate (roofing version): from the map's building outline
 alter table public.doors add column if not exists roof_base_sqft numeric;
@@ -188,3 +172,84 @@ alter table public.doors add column if not exists roof_pitch int;
 alter table public.doors add column if not exists roof_source text default '';
 alter table public.doors add column if not exists roof_building_id text default '';
 alter table public.doors add column if not exists roof_checked_at timestamptz;
+
+-- Office CRM: jobs (pipeline stage, value, insurance claim), tasks and notes.
+-- Kept apart from doors so a rep's phone syncing an older copy of a door never overwrites office edits.
+create table if not exists public.jobs (
+  door_id text primary key references public.doors(id) on delete cascade,
+  stage text not null default 'new',
+  value numeric,
+  deductible numeric,
+  insurer text default '',
+  claim_number text default '',
+  adjuster text default '',
+  adjuster_phone text default '',
+  assigned_to text default '',
+  next_step text default '',
+  next_step_due date,
+  lost_reason text default '',
+  stage_changed_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by_name text default ''
+);
+create table if not exists public.tasks (
+  id uuid primary key default gen_random_uuid(),
+  door_id text references public.doors(id) on delete cascade,
+  title text not null,
+  due date,
+  done boolean not null default false,
+  assigned_to text default '',
+  created_by_name text default '',
+  created_at timestamptz not null default now(),
+  done_at timestamptz
+);
+create index if not exists tasks_open on public.tasks (done, due);
+create table if not exists public.notes (
+  id uuid primary key default gen_random_uuid(),
+  door_id text not null references public.doors(id) on delete cascade,
+  kind text not null default 'note' check (kind in ('note','call','text','email')),
+  body text not null,
+  by_name text default '',
+  at timestamptz not null default now()
+);
+create index if not exists notes_door on public.notes (door_id, at);
+
+drop trigger if exists jobs_touch on public.jobs;
+create trigger jobs_touch before insert or update on public.jobs for each row execute function public.touch_updated_at();
+
+alter table public.jobs enable row level security;
+alter table public.tasks enable row level security;
+alter table public.notes enable row level security;
+drop policy if exists jobs_all on public.jobs;
+create policy jobs_all on public.jobs for all to authenticated using (public.is_rep()) with check (public.is_rep());
+drop policy if exists tasks_all on public.tasks;
+create policy tasks_all on public.tasks for all to authenticated using (public.is_rep()) with check (public.is_rep());
+drop policy if exists notes_all on public.notes;
+create policy notes_all on public.notes for all to authenticated using (public.is_rep()) with check (public.is_rep());
+grant select, insert, update, delete on public.jobs, public.tasks, public.notes to authenticated;
+
+do $$ begin alter publication supabase_realtime add table public.jobs; exception when duplicate_object then null; end $$;
+do $$ begin alter publication supabase_realtime add table public.tasks; exception when duplicate_object then null; end $$;
+
+-- The leads view now carries the office pipeline stage and job value
+drop view if exists public.leads;
+create view public.leads with (security_invoker = true) as
+select
+  coalesce(j.stage, case d.status when 'booked' then 'booked' else 'new' end) as stage,
+  case d.status when 'booked' then 'Booked' when 'lead' then 'Lead' when 'back' then 'Come back' else d.status end as field_outcome,
+  d.slot as inspection,
+  d.name as customer, d.phone, d.email, d.contact_pref, d.consent as ok_to_text,
+  d.address, d.city, d.zip,
+  jsonb_array_length(d.vehicles) as vehicles,
+  (select string_agg(concat_ws(' · ', nullif(v->>'ymm', ''), nullif((select string_agg(p, ', ') from jsonb_array_elements_text(coalesce(v->'panels', '[]')) p), ''), nullif(v->>'sev', '')), '; ')
+     from jsonb_array_elements(d.vehicles) v) as damage,
+  coalesce(nullif(j.insurer, ''), (select string_agg(distinct v->>'insurer', ', ') from jsonb_array_elements(d.vehicles) v where coalesce(v->>'insurer', '') <> '')) as insurer,
+  j.claim_number, j.value as job_value, j.next_step, j.next_step_due,
+  d.back_when, d.notes, d.storm, d.turf,
+  d.updated_by_name as rep, greatest(d.updated_at, j.updated_at) as last_update, d.id as door_id
+from public.doors d
+left join public.jobs j on j.door_id = d.id
+where d.status in ('booked', 'lead', 'back') or j.door_id is not null
+order by (d.status = 'booked') desc, d.updated_at desc;
+grant select on public.leads to authenticated;

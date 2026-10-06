@@ -1,10 +1,10 @@
 -- Dano's Dents Knock: database health check. Changes nothing.
 -- Supabase → SQL Editor → New query → paste all of this → Run. Every row should say PASS.
 with
-t(name) as (values ('reps'), ('doors'), ('visits'), ('app_settings')),
+t(name) as (values ('reps'), ('doors'), ('visits'), ('app_settings'), ('jobs'), ('tasks'), ('notes')),
 need_cols(col) as (values ('id'), ('lat'), ('lng'), ('address'), ('status'), ('attempts'), ('vehicles'), ('name'), ('phone'),
   ('email'), ('consent'), ('slot'), ('notes'), ('storm'), ('photos'), ('updated_by'), ('updated_by_name'), ('driveway'),
-  ('owner'), ('home_value'), ('beds'), ('owner_hidden'))
+  ('owner'), ('home_value'), ('beds'), ('owner_hidden'), ('roof_squares'))
 select "check", result, case when result = 'FAIL' or n >= 20 then fix else '' end as "fix / detail" from (
   select 1 as n, 'Table ' || t.name || ' exists' as "check",
     case when to_regclass('public.' || t.name) is not null then 'PASS' else 'FAIL' end as result,
@@ -54,7 +54,7 @@ select "check", result, case when result = 'FAIL' or n >= 20 then fix else '' en
   select 9, 'Live updates between phones: ' || x.name,
     case when exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = x.name) then 'PASS' else 'FAIL' end,
     'Run reset_and_setup.sql'
-  from (values ('doors'), ('visits')) x(name)
+  from (values ('doors'), ('visits'), ('jobs'), ('tasks')) x(name)
   union all
   select 10, 'Damage photo storage (bucket "damage", private)',
     case when exists (select 1 from storage.buckets where id = 'damage' and not public) then 'PASS' else 'FAIL' end,

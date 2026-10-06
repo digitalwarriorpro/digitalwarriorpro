@@ -959,6 +959,9 @@ function showGate(kind, msg) {
       <div id="county-test"></div>
       <details><summary class="note" style="cursor:pointer">Other counties (Clay, Platte, Cass…): Regrid paid API</summary>
       <form id="f-prop" class="field" style="margin-top:8px"><label for="g-regrid">Regrid API token (optional)</label><input type="text" id="g-regrid" value="${esc(propSettings.regridToken)}" autocomplete="off" placeholder="Paste token"><button class="btn" style="margin-top:8px">Save${sync.enabled && sync.user ? " for the whole team" : " on this phone"}</button></form></details></section>` : ""}
+    <section><div class="label">Office</div>
+      <p class="note">Pipeline, job details, tasks and reports for the office. Best on a computer: <strong>${esc(location.origin + location.pathname.replace(/[^/]*$/, ""))}office.html</strong></p>
+      <div class="row"><a class="btn" href="office.html">Open the office dashboard</a></div></section>
     <section><div class="label">Roofing tools (preview)</div>
       <p class="note">Roof size estimates on each door, for the roofing version of the app. ${CONFIG.roofEstimates ? "On for this company." : "Turn on to preview them on this phone only."}</p>
       ${CONFIG.roofEstimates ? "" : `<div class="row"><button class="btn" data-g="roof-preview">${roofOn() ? "Turn off roof estimates" : "Turn on roof estimates"}</button></div>`}</section>

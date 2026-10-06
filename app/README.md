@@ -118,6 +118,23 @@ texts and calendar invites), check the `storms` list and the inspection `times`,
 - **Settings** (tap your name): sync status, sign out, and **Add doors from a list** for CSV files with
   `address,lat,lng` columns (county parcel exports, Hail Recon lists).
 
+## Office dashboard (`office.html`)
+
+Open `https://<your-app-address>/office.html` on a computer and sign in with the same email and password as the app.
+
+- **Pipeline:** every lead, booking and come-back from the field, as cards in stages you drag between
+  (`config.js → pipeline`; a roofing version can use its own). Cards show the inspection time, job value,
+  next step (red when overdue), owner and days in stage. Moving a card logs it in the job's activity; **Lost** asks why.
+- **Job page** (click a card): stage, job value, owner, insurance company, claim #, adjuster, deductible, next step and
+  due date; the customer's contact details with call / text / email / directions; vehicles, damage and photos from the
+  field; tasks; and one activity timeline of field knocks plus office calls, texts, emails and notes.
+- **Contacts:** searchable list with CSV export. **Tasks:** overdue, today and upcoming, with a badge on the tab.
+- **Reports:** knocks, conversations, leads, bookings and conversion for today / 7 / 30 days / all time, the
+  pipeline's value by stage, and a per-rep table.
+
+Office data lives in `jobs`, `tasks` and `notes`, separate from the doors the phones sync, so a phone that was
+offline can never overwrite an office edit. Updates from the field appear within seconds.
+
 ## Limits to know
 
 - **Addresses** come from OpenStreetMap. Most of Johnson County and KC proper have house numbers there;
@@ -147,6 +164,9 @@ js/county.js               Free county parcel lookups (Johnson, Wyandotte, Jacks
 js/property.js             Lookup routing (county first, Regrid fallback) and county CSV columns
 js/config.js               Team settings (Supabase keys, shop, storms, slots, tiles)
 sw.js, manifest.webmanifest  Offline support and home-screen install
+office.html, office.css, js/office.js  Office CRM: pipeline, job page, tasks, contacts, reports
+js/roof.js                 Roof size estimate from the map's building outline (roofing version)
+status.html                Connection and database check for a phone
 vendor/                    Leaflet 1.9.4 and supabase-js 2.45.4, bundled so the app never depends on a CDN
 ../supabase/schema.sql     Database tables, security rules, photo storage
 ```

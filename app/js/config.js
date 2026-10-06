@@ -3,7 +3,7 @@
 // limits every table to signed-in reps.
 export const CONFIG = {
   // Shown on the sign-in, name and settings screens; keep in step with VERSION in sw.js
-  appVersion: "21",
+  appVersion: "22",
   // Supabase project (Project Settings → API). Leave blank to run in single-phone mode.
   supabaseUrl: "https://dwkayufjpthvovchvsta.supabase.co",
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3a2F5dWZqcHRodm92Y2h2c3RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3MTIwOTksImV4cCI6MjEwNjI4ODA5OX0.Vd596wo3PnPc14kqQCAK_h0EKh1jqUOVaR757xFeoA0",
@@ -53,6 +53,18 @@ export const CONFIG = {
   // Free homeowner and home value lookups from Johnson, Wyandotte and Jackson county parcel maps.
   // Off for the first launch; set to true to turn the Homeowner card, filters and Settings section back on.
   countyRecords: false,
+
+  // Office CRM pipeline (office.html). Each company can have its own stages; "lost" is always available.
+  pipeline: [
+    { key: "new", label: "New lead" },
+    { key: "booked", label: "Inspection booked" },
+    { key: "inspected", label: "Inspected / estimate" },
+    { key: "claim", label: "Claim filed" },
+    { key: "approved", label: "Approved" },
+    { key: "scheduled", label: "Repair scheduled" },
+    { key: "done", label: "Repair done" },
+    { key: "paid", label: "Paid" },
+  ],
 
   // Roofing tools: roof size estimate on each door (for the roofing version). Off for PDR crews;
   // Settings has a preview switch for one phone.
