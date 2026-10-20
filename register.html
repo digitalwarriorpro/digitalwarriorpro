@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register a Disc — DiskTrek</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .register-layout { display: grid; grid-template-columns: 1fr 400px; gap: 32px; align-items: start; }
+    @media (max-width: 900px) { .register-layout { grid-template-columns: 1fr; } }
+    .preview-disc { width: 160px; height: 160px; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; font-size: 60px; transition: background 0.3s; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+    .preview-name { font-family: 'Syne',sans-serif; font-size: 22px; font-weight: 800; text-align:center; margin-bottom: 4px; }
+    .preview-sub { font-size: 14px; color: var(--gray-500); text-align:center; margin-bottom: 20px; }
+    .preview-table { width: 100%; }
+    .preview-table td { padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--gray-100); }
+    .preview-table td:first-child { color: var(--gray-400); width: 100px; }
+    .step-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--gray-200); margin-bottom: 32px; }
+    .step-tab { padding: 12px 20px; font-size: 14px; font-weight: 600; color: var(--gray-400); border-bottom: 3px solid transparent; margin-bottom: -2px; cursor: pointer; transition: color 0.2s, border-color 0.2s; }
+    .step-tab.active { color: var(--green-700); border-bottom-color: var(--green-700); }
+    .step-tab.done { color: var(--green-600); }
+    .form-step { display: none; }
+    .form-step.active { display: block; }
+    .progress-bar { height: 4px; background: var(--gray-200); border-radius: 2px; margin-bottom: 28px; }
+    .progress-fill { height: 100%; background: var(--green-600); border-radius: 2px; transition: width 0.4s; }
+  </style>
+</head>
+<body class="app-page">
+  <nav class="nav"><div class="nav-inner container"><a href="index.html" class="nav-logo"><span class="logo-icon">⬤</span>DiskTrek</a><ul class="nav-links"><li><a href="dashboard.html">My Discs</a></li><li><a href="register.html" class="btn btn-primary btn-sm">+ Register</a></li></ul><button class="nav-toggle" id="navToggle"><span></span><span></span><span></span></button></div></nav>
+  <div class="app-wrapper">
+    <div class="app-header"><div class="container"><div class="app-header-inner"><div><h1>Register a Disc</h1><p>Give your disc a permanent digital identity with a unique QR code.</p></div><a href="dashboard.html" class="btn btn-ghost-dark">← My Collection</a></div></div></div>
+    <div class="app-body"><div class="container"><div class="register-layout">
+      <div class="card card-pad">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:33%"></div></div>
+        <div class="step-tabs"><div class="step-tab active" data-step="1">1. Disc Info</div><div class="step-tab" data-step="2">2. Owner Info</div><div class="step-tab" data-step="3">3. Your QR Code</div></div>
+        <div class="form-step active" id="step1">
+          <div class="form-section-title">Disc Type</div>
+          <div class="disc-type-grid" id="discTypeGrid">
+            <button class="disc-type-btn" data-type="putter"><span>🟤</span><p>Putter</p></button>
+            <button class="disc-type-btn" data-type="midrange"><span>🟠</span><p>Mid-Range</p></button>
+            <button class="disc-type-btn active" data-type="fairway"><span>🟡</span><p>Fairway Driver</p></button>
+            <button class="disc-type-btn" data-type="distance"><span>🔴</span><p>Distance Driver</p></button>
+          </div>
+          <div class="form-section-title">Disc Details</div>
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Brand / Manufacturer *</label><select class="form-select" id="discBrand"><option value="">Select brand…</option><option>Innova</option><option>Discraft</option><option>Dynamic Discs</option><option>MVP Disc Sports</option><option>Axiom Discs</option><option>Latitude 64</option><option>Westside Discs</option><option>Prodigy</option><option>Kastaplast</option><option>Legacy Discs</option><option>Discmania</option><option>Thought Space Athletics</option><option>Gateway</option><option>Millennium</option><option>Other</option></select></div>
+            <div class="form-group"><label class="form-label">Mold Name *</label><input class="form-input" type="text" id="discName" placeholder="e.g. Destroyer, Aviar, Zone…" /></div>
+            <div class="form-group"><label class="form-label">Plastic Type</label><input class="form-input" type="text" id="discPlastic" placeholder="e.g. Star, Champion, Z Line…" /></div>
+            <div class="form-group"><label class="form-label">Weight (grams)</label><input class="form-input" type="number" id="discWeight" placeholder="e.g. 175" min="100" max="200" /></div>
+          </div>
+          <div class="form-section-title">Color</div>
+          <div class="color-swatches" id="colorSwatches"></div>
+          <input type="hidden" id="discColor" value="Green" />
+          <div class="form-section-title">Condition &amp; Notes</div>
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Current Condition</label><select class="form-select" id="discCondition"><option value="new">New</option><option value="good">Good</option><option value="worn">Worn</option><option value="beat-in">Beat-In</option></select></div>
+            <div class="form-group"><label class="form-label">Flight Numbers (optional)</label><input class="form-input" type="text" id="discFlight" placeholder="Speed / Glide / Turn / Fade" /></div>
+            <div class="form-group full"><label class="form-label">Notes</label><textarea class="form-textarea" id="discNotes" placeholder="Any special notes about this disc…"></textarea></div>
+          </div>
+          <div class="mt-24 flex" style="justify-content:flex-end"><button class="btn btn-primary" onclick="goStep(2)">Continue to Owner Info →</button></div>
+        </div>
+        <div class="form-step" id="step2">
+          <p style="font-size:14px;color:var(--gray-500);margin-bottom:24px;">This information will appear when someone scans your disc's QR code. Only add what you're comfortable sharing publicly.</p>
+          <div class="form-grid">
+            <div class="form-group full"><label class="form-label">Your Name *</label><input class="form-input" type="text" id="ownerName" placeholder="Full name" /></div>
+            <div class="form-group"><label class="form-label">Email Address</label><input class="form-input" type="email" id="ownerEmail" placeholder="you@email.com" /></div>
+            <div class="form-group"><label class="form-label">Phone Number</label><input class="form-input" type="tel" id="ownerPhone" placeholder="+1 555 000 0000" /></div>
+            <div class="form-group"><label class="form-label">UDisc Username</label><input class="form-input" type="text" id="ownerUdisc" placeholder="@username" /></div>
+            <div class="form-group"><label class="form-label">PDGA Number (optional)</label><input class="form-input" type="text" id="ownerPdga" placeholder="e.g. 123456" /></div>
+          </div>
+          <div class="form-section-title">Finder Reward (optional)</div>
+          <div class="form-group"><label class="form-label">Reward for returning disc</label><input class="form-input" type="text" id="ownerReward" placeholder="e.g. $5, a disc, a beer — totally up to you!" /></div>
+          <div class="mt-24 flex gap-12" style="justify-content:space-between"><button class="btn btn-ghost-dark" onclick="goStep(1)">← Back</button><button class="btn btn-primary" onclick="registerDisc()">Register &amp; Generate QR →</button></div>
+        </div>
+        <div class="form-step" id="step3">
+          <div id="qrOutput" class="qr-output-box visible">
+            <h3 style="font-size:18px;font-weight:700;margin-bottom:4px;" id="qrDiscTitle">Your disc is registered!</h3>
+            <p style="font-size:14px;color:var(--gray-500);margin-bottom:24px;">Print this QR code and stick it on your disc. Anyone who finds it can scan it to contact you.</p>
+            <div id="qrCode" style="margin:0 auto 16px;width:fit-content;"></div>
+            <p class="qr-label" id="qrUrlLabel"></p>
+            <div class="qr-actions"><button class="btn btn-primary" onclick="downloadQR()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Download QR Sticker</button><a id="viewDiscBtn" href="#" class="btn btn-outline">View Disc Page →</a></div>
+          </div>
+          <div class="mt-24" style="background:var(--gray-50);border-radius:var(--radius);padding:20px;"><h4 style="font-size:14px;font-weight:700;margin-bottom:10px;">Sticker Tips</h4><ul style="display:flex;flex-direction:column;gap:8px;"><li style="font-size:13px;color:var(--gray-600);display:flex;gap:8px;"><span>🖨️</span> Print on waterproof label paper for best durability</li><li style="font-size:13px;color:var(--gray-600);display:flex;gap:8px;"><span>📏</span> Recommended size: 1.5" × 1.5" or larger</li><li style="font-size:13px;color:var(--gray-600);display:flex;gap:8px;"><span>🥏</span> Place on the top of the disc near the rim</li><li style="font-size:13px;color:var(--gray-600);display:flex;gap:8px;"><span>✅</span> Cover with clear packing tape for extra protection</li></ul></div>
+          <div class="mt-24 flex gap-12" style="justify-content:space-between"><button class="btn btn-ghost-dark" onclick="registerAnother()">Register Another Disc</button><a href="dashboard.html" class="btn btn-primary">View My Collection →</a></div>
+        </div>
+      </div>
+      <div><div class="card card-pad" style="position:sticky;top:88px;"><h3 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-400);margin-bottom:20px;">Live Preview</h3><div class="preview-disc" id="previewDisc">🥏</div><div class="preview-name" id="previewName">Your Disc Name</div><div class="preview-sub" id="previewSub">Brand • Plastic</div><table class="preview-table"><tr><td>Type</td><td id="prevType">—</td></tr><tr><td>Weight</td><td id="prevWeight">—</td></tr><tr><td>Color</td><td id="prevColor">—</td></tr><tr><td>Condition</td><td id="prevCond">—</td></tr><tr><td>Flight</td><td id="prevFlight">—</td></tr><tr><td>Owner</td><td id="prevOwner">—</td></tr></table></div></div>
+    </div></div></div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    const colors = ['Red','Orange','Yellow','Green','Blue','Purple','Pink','White','Black','Teal','Gray','Tie-Dye'];
+    const swatchContainer = document.getElementById('colorSwatches');
+    let selectedColor = 'Green';
+    colors.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'color-swatch' + (c === 'Green' ? ' active' : '');
+      btn.title = c; btn.setAttribute('aria-label', c);
+      btn.style.background = DT.colorMap[c] || '#6b7280';
+      if (c === 'White') btn.style.border = '3px solid var(--gray-300)';
+      btn.onclick = () => { document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active')); btn.classList.add('active'); selectedColor = c; document.getElementById('discColor').value = c; updatePreview(); };
+      swatchContainer.appendChild(btn);
+    });
+    document.querySelectorAll('.disc-type-btn').forEach(btn => { btn.addEventListener('click', () => { document.querySelectorAll('.disc-type-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); updatePreview(); }); });
+    function updatePreview() {
+      const brand=document.getElementById('discBrand').value, name=document.getElementById('discName').value, plastic=document.getElementById('discPlastic').value, weight=document.getElementById('discWeight').value, cond=document.getElementById('discCondition').value, flight=document.getElementById('discFlight').value, owner=document.getElementById('ownerName').value, type=document.querySelector('.disc-type-btn.active')?.dataset.type||'fairway', ti=DT.typeInfo[type]||{};
+      document.getElementById('previewDisc').textContent = ti.emoji || '🥏';
+      document.getElementById('previewDisc').style.background = discBg(selectedColor);
+      document.getElementById('previewName').textContent = name || 'Your Disc Name';
+      document.getElementById('previewSub').textContent = [brand, plastic].filter(Boolean).join(' • ') || 'Brand • Plastic';
+      document.getElementById('prevType').textContent = ti.label || '—';
+      document.getElementById('prevWeight').textContent = weight ? weight + 'g' : '—';
+      document.getElementById('prevColor').textContent = selectedColor || '—';
+      document.getElementById('prevCond').textContent = cond ? cond.charAt(0).toUpperCase() + cond.slice(1) : '—';
+      document.getElementById('prevFlight').textContent = flight || '—';
+      document.getElementById('prevOwner').textContent = owner || '—';
+    }
+    ['discBrand','discName','discPlastic','discWeight','discCondition','discFlight','ownerName'].forEach(id => { document.getElementById(id)?.addEventListener('input', updatePreview); });
+    updatePreview();
+    let currentStep = 1;
+    function goStep(n) {
+      if (n === 2) { if (!document.getElementById('discName').value.trim()) { DT.toast('Please enter a disc mold name', 'error'); return; } if (!document.getElementById('discBrand').value) { DT.toast('Please select a brand', 'error'); return; } }
+      currentStep = n;
+      document.querySelectorAll('.form-step').forEach((s, i) => s.classList.toggle('active', i + 1 === n));
+      document.querySelectorAll('.step-tab').forEach((tab, i) => { tab.classList.toggle('active', i + 1 === n); tab.classList.toggle('done', i + 1 < n); });
+      document.getElementById('progressFill').style.width = (n / 3 * 100) + '%';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    let registeredDiscId = null;
+    function registerDisc() {
+      const name = document.getElementById('discName').value.trim(), owner = document.getElementById('ownerName').value.trim();
+      if (!name) { DT.toast('Please enter a disc mold name', 'error'); goStep(1); return; }
+      if (!owner) { DT.toast('Please enter your name', 'error'); return; }
+      const type = document.querySelector('.disc-type-btn.active')?.dataset.type || 'fairway';
+      const disc = { id: DT.uid(), name, brand: document.getElementById('discBrand').value, type, plastic: document.getElementById('discPlastic').value, weight: document.getElementById('discWeight').value, color: selectedColor, condition: document.getElementById('discCondition').value, flightNumbers: document.getElementById('discFlight').value, notes: document.getElementById('discNotes').value, status: 'active', owner: { name: owner, email: document.getElementById('ownerEmail').value, phone: document.getElementById('ownerPhone').value, udisc: document.getElementById('ownerUdisc').value, pdga: document.getElementById('ownerPdga').value, reward: document.getElementById('ownerReward').value }, registeredDate: new Date().toISOString().split('T')[0], rounds: [], transfers: [] };
+      DT.discs.save(disc); registeredDiscId = disc.id;
+      const url = DT.getDiscUrl(disc.id);
+      document.getElementById('qrDiscTitle').textContent = `${disc.brand} ${disc.name} — Registered!`;
+      document.getElementById('qrUrlLabel').textContent = url;
+      document.getElementById('viewDiscBtn').href = `disc.html?id=${disc.id}`;
+      const qrContainer = document.getElementById('qrCode'); qrContainer.innerHTML = '';
+      new QRCode(qrContainer, { text: url, width: 200, height: 200, colorDark: '#1B4332', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      goStep(3); DT.toast(`${disc.name} registered successfully!`, 'success');
+    }
+    function downloadQR() { const canvas = document.querySelector('#qrCode canvas'), img = document.querySelector('#qrCode img'); if (canvas) { const link = document.createElement('a'); link.download = `disktrek-qr-${registeredDiscId}.png`; link.href = canvas.toDataURL(); link.click(); } else if (img) { const win = window.open(); win.document.write(`<img src="${img.src}" style="width:400px;height:400px;">`); win.print(); } }
+    function registerAnother() { document.querySelectorAll('input,select,textarea').forEach(el => el.value = ''); document.querySelector('.disc-type-btn[data-type="fairway"]').click(); selectedColor = 'Green'; document.querySelectorAll('.color-swatch').forEach((s,i) => s.classList.toggle('active', colors[i] === 'Green')); document.getElementById('previewDisc').style.background = discBg('Green'); updatePreview(); goStep(1); registeredDiscId = null; }
+  </script>
+</body>
+</html>

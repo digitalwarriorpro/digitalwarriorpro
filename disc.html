@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Disc Detail — DiskTrek</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .disc-tab-bar { display:flex; gap:0; border-bottom:2px solid var(--gray-200); margin-bottom:28px; }
+    .disc-tab { padding:12px 20px; font-size:14px; font-weight:600; color:var(--gray-400); border-bottom:3px solid transparent; margin-bottom:-2px; cursor:pointer; transition:color 0.2s,border-color 0.2s; }
+    .disc-tab.active { color:var(--green-700); border-bottom-color:var(--green-700); }
+    .tab-panel { display:none; } .tab-panel.active { display:block; }
+    .round-row { display:grid; grid-template-columns:120px 1fr auto auto; gap:16px; align-items:center; padding:16px 0; border-bottom:1px solid var(--gray-100); }
+    .round-row:last-child { border-bottom:none; }
+    .round-date { font-size:13px; color:var(--gray-500); }
+    .round-course { font-size:14px; font-weight:600; }
+    .round-loc { font-size:12px; color:var(--gray-400); margin-top:2px; }
+    .round-score { font-family:'Syne',sans-serif; font-size:22px; font-weight:800; text-align:right; }
+    .round-score.neg { color:var(--green-600); } .round-score.pos { color:#ef4444; } .round-score.eve { color:var(--gray-600); }
+    .round-players { font-size:12px; color:var(--gray-400); text-align:right; }
+    .flight-nums { display:flex; gap:12px; }
+    .flight-num { text-align:center; padding:12px; background:var(--gray-50); border-radius:var(--radius); flex:1; }
+    .flight-num span { display:block; font-family:'Syne',sans-serif; font-size:24px; font-weight:800; color:var(--green-800); }
+    .flight-num small { font-size:11px; color:var(--gray-400); font-weight:600; text-transform:uppercase; letter-spacing:0.06em; margin-top:4px; display:block; }
+    .status-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    @media(max-width:600px) { .round-row { grid-template-columns:1fr 1fr; } }
+  </style>
+</head>
+<body class="app-page">
+  <nav class="nav"><div class="nav-inner container"><a href="index.html" class="nav-logo"><span class="logo-icon">⬤</span>DiskTrek</a><ul class="nav-links"><li><a href="dashboard.html">My Discs</a></li><li><a href="register.html" class="btn btn-primary btn-sm">+ Register</a></li></ul><button class="nav-toggle" id="navToggle"><span></span><span></span><span></span></button></div></nav>
+  <div class="app-wrapper" id="appWrapper">
+    <div class="disc-hero" id="discHero"><div class="container disc-hero-content" id="discHeroContent"></div><div class="disc-big-icon" id="discBigIcon"></div></div>
+    <div class="app-body"><div class="container"><div class="disc-detail-grid">
+      <div>
+        <div class="flex gap-12 mb-24" id="actionBar" style="flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="openLogRoundModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>Log a Round</button>
+          <button class="btn btn-outline" onclick="openQRModal()">Show QR Code</button>
+          <button class="btn btn-ghost-dark" id="statusBtn" onclick="cycleStatus()">Mark as Lost</button>
+          <a href="dashboard.html" class="btn btn-ghost-dark">← Back</a>
+        </div>
+        <div class="disc-tab-bar"><div class="disc-tab active" data-tab="history">Round History</div><div class="disc-tab" data-tab="players">Players</div><div class="disc-tab" data-tab="details">Disc Details</div><div class="disc-tab" data-tab="timeline">Timeline</div></div>
+        <div class="tab-panel active" id="tab-history">
+          <div class="card"><div class="card-header"><h3>Round History</h3><span class="tag tag-green" id="roundCount">0 rounds</span></div><div style="padding:0 28px;"><div id="roundsContainer"></div></div></div>
+          <div class="card mt-24" id="scoreSummary" style="display:none;"><div class="card-header"><h3>Score Summary</h3></div><div class="card-pad"><div class="score-grid" id="scoreGrid"></div></div></div>
+        </div>
+        <div class="tab-panel" id="tab-players"><div class="card"><div class="card-header"><h3>All Players</h3><span class="tag tag-blue" id="playerCount">0 players</span></div><div class="card-pad"><div class="player-list" id="playerList"></div></div></div></div>
+        <div class="tab-panel" id="tab-details"><div class="card"><div class="card-header"><h3>Disc Specifications</h3></div><div class="card-pad"><table class="detail-table" id="detailTable"></table></div></div><div class="card mt-24" id="flightCard" style="display:none;"><div class="card-header"><h3>Flight Numbers</h3></div><div class="card-pad"><div class="flight-nums" id="flightNums"></div></div></div></div>
+        <div class="tab-panel" id="tab-timeline"><div class="card"><div class="card-header"><h3>Disc Lifetime Events</h3></div><div class="card-pad"><div class="timeline" id="timeline"></div></div></div></div>
+      </div>
+      <div>
+        <div class="card mb-24" id="ownerCard"><div class="card-header"><h3>Owner</h3></div><div class="card-pad" id="ownerInfo"></div></div>
+        <div class="card mb-24"><div class="card-header"><h3>QR Code</h3></div><div class="card-pad" style="text-align:center;"><div id="sidebarQR" style="margin:0 auto 12px;width:fit-content;"></div><p style="font-size:12px;color:var(--gray-400);margin-bottom:16px;">Scan to view this disc's public page</p><button class="btn btn-outline w-full" onclick="downloadQR()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Download Sticker</button></div></div>
+        <div class="card"><div class="card-header"><h3>Status</h3></div><div class="card-pad" id="statusCard"></div></div>
+      </div>
+    </div></div></div>
+  </div>
+  <div class="modal-backdrop" id="logRoundModal"><div class="modal"><div class="modal-header"><h3>Log a Round</h3><button class="modal-close">✕</button></div><div class="modal-body"><div class="form-grid"><div class="form-group"><label class="form-label">Date *</label><input class="form-input" type="date" id="logDate" /></div><div class="form-group"><label class="form-label">Course Name *</label><input class="form-input" type="text" id="logCourse" placeholder="e.g. Maple Hill" /></div><div class="form-group"><label class="form-label">Location</label><input class="form-input" type="text" id="logLocation" placeholder="City, State" /></div><div class="form-group"><label class="form-label">Score (vs par)</label><input class="form-input" type="number" id="logScore" placeholder="-4, +2, or 0" /></div><div class="form-group"><label class="form-label">Par</label><input class="form-input" type="number" id="logPar" placeholder="e.g. 54" /></div><div class="form-group"><label class="form-label">Total Throws</label><input class="form-input" type="number" id="logThrows" /></div><div class="form-group full"><label class="form-label">Players (comma separated)</label><input class="form-input" type="text" id="logPlayers" placeholder="You, Friend 1, Friend 2" /></div><div class="form-group full"><label class="form-label">Notes</label><textarea class="form-textarea" id="logNotes"></textarea></div></div></div><div class="modal-footer"><button class="btn btn-ghost-dark modal-close">Cancel</button><button class="btn btn-primary" onclick="saveRound()">Log Round</button></div></div></div>
+  <div class="modal-backdrop" id="qrModal"><div class="modal"><div class="modal-header"><h3>Disc QR Code</h3><button class="modal-close">✕</button></div><div class="modal-body" style="text-align:center;"><div id="modalQR" style="margin:0 auto 16px;width:fit-content;"></div><p style="font-size:13px;color:var(--gray-500);margin-bottom:20px;" id="qrUrlText"></p><div class="qr-actions" style="justify-content:center;"><button class="btn btn-primary" onclick="downloadQR()">Download PNG</button><button class="btn btn-ghost-dark" onclick="printQR()">Print Sticker</button></div></div></div></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    DT.seedDemo();
+    const params = new URLSearchParams(window.location.search);
+    const discId = params.get('id');
+    let disc = DT.discs.get(discId);
+    if (!disc) { document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;text-align:center;padding:32px;"><div style="font-size:56px;margin-bottom:16px;">🥏</div><h2 style="font-family:Syne,sans-serif;font-size:28px;">Disc not found</h2><p style="color:#6B7280;margin:12px 0 24px;">This disc may have been removed.</p><a href="dashboard.html" style="background:#2D6A4F;color:white;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:600;">Back to Collection</a></div>'; } else { render(); }
+    function render() {
+      disc = DT.discs.get(discId);
+      const ti = DT.typeInfo[disc.type] || { emoji: '🥏', label: 'Disc' };
+      const si = DT.statusInfo[disc.status] || { label: 'Active', css: 'disc-status--active' };
+      const bg = discBg(disc.color);
+      document.title = `${disc.brand} ${disc.name} — DiskTrek`;
+      document.getElementById('discHero').style.background = bg;
+      document.getElementById('discBigIcon').textContent = ti.emoji;
+      document.getElementById('discHeroContent').innerHTML = `<div class="disc-hero-tag">${ti.label} · ${disc.brand||''}</div><div class="disc-hero-title">${disc.name}</div><div class="disc-hero-sub">${[disc.plastic,disc.weight?disc.weight+'g':'',disc.color].filter(Boolean).join(' · ')}&nbsp;&nbsp;<span class="${si.css}" style="font-size:14px;font-weight:700;">${si.label}</span></div>`;
+      const sb = document.getElementById('statusBtn');
+      if (disc.status==='active'){sb.textContent='Mark as Lost';sb.className='btn btn-ghost-dark';}
+      else if(disc.status==='lost'){sb.textContent='Mark as Found';sb.className='btn btn-orange';}
+      else{sb.textContent='Mark as Active';sb.className='btn btn-ghost-dark';}
+      renderRounds(); renderPlayers(); renderDetails(); renderTimeline(); renderOwner(); renderStatusCard(); renderQR();
+    }
+    function renderRounds() {
+      const rounds = (disc.rounds||[]).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+      document.getElementById('roundCount').textContent = `${rounds.length} round${rounds.length!==1?'s':''}`;
+      if (rounds.length===0) { document.getElementById('roundsContainer').innerHTML='<div class="empty-state" style="padding:48px 0;"><div class="empty-state-icon">⛳</div><h3>No rounds logged yet</h3><p>Start tracking where this disc has been played.</p><button class="btn btn-primary" onclick="openLogRoundModal()">Log First Round</button></div>'; document.getElementById('scoreSummary').style.display='none'; return; }
+      document.getElementById('roundsContainer').innerHTML = rounds.map(r=>{ const sc=r.score||0,cls=sc<0?'neg':sc>0?'pos':'eve'; return `<div class="round-row"><div class="round-date">${DT.fmt.date(r.date)}</div><div><div class="round-course">${r.course}</div>${r.location?`<div class="round-loc">📍 ${r.location}</div>`:''} ${r.notes?`<div class="round-loc" style="font-style:italic;">${r.notes}</div>`:''}</div><div><div class="round-players">${r.players?.length?r.players.join(', '):'—'}</div>${r.throws?`<div class="round-players">${r.throws} throws${r.par?' / par '+r.par:''}</div>`:''}</div><div class="round-score ${cls}">${DT.fmt.score(sc)}</div></div>`; }).join('');
+      const scores=rounds.map(r=>r.score||0),best=Math.min(...scores),avg=(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1),worst=Math.max(...scores);
+      document.getElementById('scoreGrid').innerHTML=`<div class="score-item"><div class="score-num ${best<0?'under':best>0?'over':'even'}">${DT.fmt.score(best)}</div><div class="score-label">Best Round</div></div><div class="score-item"><div class="score-num ${parseFloat(avg)<0?'under':parseFloat(avg)>0?'over':'even'}">${DT.fmt.score(parseFloat(avg))}</div><div class="score-label">Average</div></div><div class="score-item"><div class="score-num ${worst<0?'under':worst>0?'over':'even'}">${DT.fmt.score(worst)}</div><div class="score-label">Worst Round</div></div>`;
+      document.getElementById('scoreSummary').style.display='';
+    }
+    function renderPlayers() {
+      const rounds=disc.rounds||[], allPlayers=[...new Set(rounds.flatMap(r=>r.players||[]))];
+      document.getElementById('playerCount').textContent=`${allPlayers.length} player${allPlayers.length!==1?'s':''}`;
+      if(allPlayers.length===0){document.getElementById('playerList').innerHTML='<div style="text-align:center;padding:32px 0;color:var(--gray-400)">No players logged yet.</div>';return;}
+      document.getElementById('playerList').innerHTML=allPlayers.map(p=>{ const init=p.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(),rc=rounds.filter(r=>(r.players||[]).includes(p)).length,courses=[...new Set(rounds.filter(r=>(r.players||[]).includes(p)).map(r=>r.course))]; return `<div class="player-item"><div class="player-avatar">${init}</div><div class="player-info"><strong>${p}</strong><span>${rc} round${rc!==1?'s':''} · ${courses.slice(0,2).join(', ')}${courses.length>2?` +${courses.length-2}`:''}</span></div></div>`; }).join('');
+    }
+    function renderDetails() {
+      const rows=[['Brand',disc.brand],['Mold',disc.name],['Type',DT.typeInfo[disc.type]?.label],['Plastic',disc.plastic],['Weight',disc.weight?disc.weight+'g':null],['Color',disc.color],['Condition',disc.condition?disc.condition.charAt(0).toUpperCase()+disc.condition.slice(1):null],['Registered',DT.fmt.date(disc.registeredDate)],['Owner',disc.owner?.name],['UDisc',disc.owner?.udisc],['PDGA #',disc.owner?.pdga],['Notes',disc.notes]].filter(([,v])=>v);
+      document.getElementById('detailTable').innerHTML=rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+      if(disc.flightNumbers){const parts=disc.flightNumbers.split(/[\s/,]+/).filter(Boolean),labels=['Speed','Glide','Turn','Fade'];if(parts.length>=2){document.getElementById('flightCard').style.display='';document.getElementById('flightNums').innerHTML=parts.slice(0,4).map((n,i)=>`<div class="flight-num"><span>${n}</span><small>${labels[i]||''}</small></div>`).join('');}}
+    }
+    function renderTimeline() {
+      const events=[{date:disc.registeredDate,label:'Disc Registered',sub:'Added to DiskTrek',icon:'🥏',type:'green'}];
+      (disc.rounds||[]).forEach(r=>events.push({date:r.date,label:`Round at ${r.course}`,sub:`Score: ${DT.fmt.score(r.score||0)} · ${(r.players||[]).length} player${(r.players||[]).length!==1?'s':''}`,icon:'⛳',type:'default'}));
+      (disc.transfers||[]).forEach(t=>events.push({date:t.date,label:`Disc ${t.type}`,sub:`${t.from} → ${t.to}`,icon:'🔄',type:'orange'}));
+      events.sort((a,b)=>new Date(b.date)-new Date(a.date));
+      document.getElementById('timeline').innerHTML=events.map((e,i)=>`<div class="timeline-item"><div class="timeline-line"><div class="timeline-dot ${e.type==='orange'?'timeline-dot--orange':e.type==='blue'?'timeline-dot--blue':''}">${e.icon}</div>${i<events.length-1?'<div class="timeline-connector"></div>':''}</div><div class="timeline-body"><h4>${e.label}</h4><p>${e.sub}</p></div><div class="timeline-date">${DT.fmt.date(e.date)}</div></div>`).join('');
+    }
+    function renderOwner() {
+      const o=disc.owner||{};
+      document.getElementById('ownerInfo').innerHTML=`<div class="player-item" style="margin-bottom:16px;"><div class="player-avatar">${(o.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div><div class="player-info"><strong>${o.name||'Unknown'}</strong>${o.udisc?`<span>${o.udisc} on UDisc</span>`:''}</div></div>${o.email?`<div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;"><span>✉️</span> <a href="mailto:${o.email}" style="color:var(--green-700);">${o.email}</a></div>`:''} ${o.phone?`<div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;"><span>📞</span> <a href="tel:${o.phone}" style="color:var(--green-700);">${o.phone}</a></div>`:''} ${o.pdga?`<div style="font-size:13px;color:var(--gray-500);">PDGA # ${o.pdga}</div>`:''} ${o.reward?`<div style="margin-top:12px;padding:10px;background:var(--green-50);border-radius:var(--radius);border:1px solid var(--green-200);font-size:13px;color:var(--green-800);">🎁 Reward: ${o.reward}</div>`:''}` ;
+    }
+    function renderStatusCard() {
+      const si=DT.statusInfo[disc.status]||{label:'Active',css:'disc-status--active'};
+      document.getElementById('statusCard').innerHTML=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;"><div style="width:12px;height:12px;border-radius:50%;background:${disc.status==='active'?'#22c55e':disc.status==='lost'?'#ef4444':'#f97316'};"></div><span style="font-weight:700;font-size:15px;">${si.label}</span></div><div style="font-size:13px;color:var(--gray-500);">${disc.status==='active'?'This disc is in active play.':disc.status==='lost'?'This disc has been marked as lost. Share the QR code to help it find its way home.':'This disc has been retired from play.'}</div><div class="status-actions mt-16">${disc.status!=='active'?`<button class="btn btn-primary btn-sm" onclick="setStatus('active')">Mark Active</button>`:''} ${disc.status!=='lost'?`<button class="btn btn-orange btn-sm" onclick="setStatus('lost')">Mark Lost</button>`:''} ${disc.status!=='retired'?`<button class="btn btn-ghost-dark btn-sm" onclick="setStatus('retired')">Retire</button>`:''}</div><div class="mt-16" style="border-top:1px solid var(--gray-100);padding-top:16px;"><button class="btn btn-danger btn-sm" onclick="deleteDisc()" style="width:100%;justify-content:center;">Delete Disc</button></div>`;
+    }
+    function renderQR() {
+      const url=DT.getDiscUrl(disc.id);
+      document.getElementById('qrUrlText').textContent=url;
+      ['sidebarQR','modalQR'].forEach(id=>{ const el=document.getElementById(id); el.innerHTML=''; new QRCode(el,{text:url,width:id==='sidebarQR'?140:200,height:id==='sidebarQR'?140:200,colorDark:'#1B4332',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M}); });
+    }
+    document.querySelectorAll('.disc-tab').forEach(tab=>{ tab.addEventListener('click',()=>{ document.querySelectorAll('.disc-tab').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active')); tab.classList.add('active'); document.getElementById('tab-'+tab.dataset.tab).classList.add('active'); }); });
+    function openLogRoundModal() { document.getElementById('logDate').value=new Date().toISOString().split('T')[0]; openModal('logRoundModal'); }
+    function openQRModal() { openModal('qrModal'); }
+    function saveRound() { const course=document.getElementById('logCourse').value.trim(); if(!course){DT.toast('Please enter a course name','error');return;} disc.rounds=disc.rounds||[]; disc.rounds.push({id:DT.uid(),date:document.getElementById('logDate').value,course,location:document.getElementById('logLocation').value,score:parseInt(document.getElementById('logScore').value)||0,par:parseInt(document.getElementById('logPar').value)||null,throws:parseInt(document.getElementById('logThrows').value)||null,players:document.getElementById('logPlayers').value.split(',').map(p=>p.trim()).filter(Boolean),notes:document.getElementById('logNotes').value}); DT.discs.save(disc); closeModal('logRoundModal'); DT.toast(`Round at ${course} logged!`,'success'); render(); }
+    function cycleStatus() { const order={active:'lost',lost:'active',retired:'active'}; setStatus(order[disc.status]||'active'); }
+    function setStatus(status) { disc.status=status; DT.discs.save(disc); DT.toast(`Disc marked as ${status}`,'success'); render(); }
+    function deleteDisc() { if(!confirm(`Delete ${disc.brand} ${disc.name}? This cannot be undone.`)) return; DT.discs.delete(disc.id); DT.toast('Disc deleted','info'); window.location.href='dashboard.html'; }
+    function downloadQR() { const canvas=document.querySelector('#sidebarQR canvas')||document.querySelector('#modalQR canvas'); if(canvas){const link=document.createElement('a');link.download=`disktrek-qr-${disc.id}.png`;link.href=canvas.toDataURL();link.click();} }
+    function printQR() { const canvas=document.querySelector('#modalQR canvas'); if(!canvas) return; const win=window.open('','_blank'); win.document.write(`<!DOCTYPE html><html><head><title>DiskTrek QR - ${disc.name}</title><style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;}</style></head><body><h2>${disc.brand} ${disc.name}</h2><p>Scan to track this disc on DiskTrek</p><img src="${canvas.toDataURL()}" width="300" height="300"><script>window.onload=()=>window.print()<\/script></body></html>`); }
+  </script>
+</body>
+</html>
