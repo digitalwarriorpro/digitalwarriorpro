@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Disc Collection — DiskTrek</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body class="app-page">
+  <nav class="nav"><div class="nav-inner container"><a href="index.html" class="nav-logo"><span class="logo-icon">⬤</span>DiskTrek</a><ul class="nav-links"><li><a href="dashboard.html">My Discs</a></li><li><a href="register.html" class="btn btn-primary btn-sm">+ Register Disc</a></li></ul><button class="nav-toggle" id="navToggle"><span></span><span></span><span></span></button></div></nav>
+  <div class="app-wrapper">
+    <div class="app-header"><div class="container"><div class="app-header-inner"><div><h1 id="dashGreeting">My Disc Collection</h1><p id="dashSubtitle">Loading your discs…</p></div><a href="register.html" class="btn btn-primary"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>Register a Disc</a></div></div></div>
+    <div class="app-body"><div class="container">
+      <div class="dash-stats" id="dashStats"></div>
+      <div class="filter-bar">
+        <input type="text" id="searchInput" placeholder="Search by name, brand, or course…" />
+        <button class="filter-chip active" data-filter="all">All</button>
+        <button class="filter-chip" data-filter="active">Active</button>
+        <button class="filter-chip" data-filter="lost">Lost</button>
+        <button class="filter-chip" data-filter="retired">Retired</button>
+        <select id="typeFilter" style="padding:8px 12px;border:1.5px solid var(--gray-300);border-radius:var(--radius-full);font-size:13px;font-weight:600;color:var(--gray-600);background:white;outline:none;cursor:pointer;"><option value="">All Types</option><option value="putter">Putters</option><option value="midrange">Mid-Range</option><option value="fairway">Fairway Drivers</option><option value="distance">Distance Drivers</option></select>
+      </div>
+      <div class="disc-grid" id="discGrid"></div>
+      <div class="empty-state hidden" id="emptyState"><div class="empty-state-icon">🥏</div><h3>No discs found</h3><p>Register your first disc to get started.</p><a href="register.html" class="btn btn-primary btn-lg">Register Your First Disc</a></div>
+    </div></div>
+  </div>
+  <div class="modal-backdrop" id="logRoundModal"><div class="modal"><div class="modal-header"><h3>Log a Round</h3><button class="modal-close">✕</button></div><div class="modal-body"><input type="hidden" id="logDiscId" /><div class="form-grid"><div class="form-group"><label class="form-label">Date *</label><input class="form-input" type="date" id="logDate" /></div><div class="form-group"><label class="form-label">Course Name *</label><input class="form-input" type="text" id="logCourse" placeholder="e.g. Maple Hill" /></div><div class="form-group"><label class="form-label">Location</label><input class="form-input" type="text" id="logLocation" placeholder="City, State" /></div><div class="form-group"><label class="form-label">Score (relative to par)</label><input class="form-input" type="number" id="logScore" placeholder="e.g. -4, +2, 0" /></div><div class="form-group"><label class="form-label">Par</label><input class="form-input" type="number" id="logPar" placeholder="e.g. 54" /></div><div class="form-group"><label class="form-label">Total Throws</label><input class="form-input" type="number" id="logThrows" placeholder="e.g. 50" /></div><div class="form-group full"><label class="form-label">Players (comma separated)</label><input class="form-input" type="text" id="logPlayers" placeholder="e.g. You, Friend 1, Friend 2" /></div><div class="form-group full"><label class="form-label">Notes</label><textarea class="form-textarea" id="logNotes" placeholder="Any notes about the round…"></textarea></div></div></div><div class="modal-footer"><button class="btn btn-ghost-dark modal-close">Cancel</button><button class="btn btn-primary" onclick="saveRound()">Log Round</button></div></div></div>
+  <script src="js/app.js"></script>
+  <script>
+    DT.seedDemo();
+    function renderStats() {
+      const s = DT.discs.stats();
+      document.getElementById('dashStats').innerHTML = [{icon:'🥏',num:s.total,label:'Total Discs'},{icon:'✅',num:s.active,label:'Active'},{icon:'🔍',num:s.lost,label:'Lost'},{icon:'⛳',num:s.rounds,label:'Rounds Logged'}].map(s=>`<div class="dash-stat"><div class="dash-stat-icon">${s.icon}</div><div><div class="dash-stat-num">${s.num}</div><div class="dash-stat-label">${s.label}</div></div></div>`).join('');
+      document.getElementById('dashSubtitle').textContent = s.total===0?'Register your first disc to get started':`${s.total} disc${s.total!==1?'s':''} • ${s.rounds} round${s.rounds!==1?'s':''} logged`;
+    }
+    function renderDiscs(filter='all',search='',type='') {
+      let discs = DT.discs.getAll();
+      if (filter!=='all') discs=discs.filter(d=>d.status===filter);
+      if (type) discs=discs.filter(d=>d.type===type);
+      if (search) { const q=search.toLowerCase(); discs=discs.filter(d=>d.name?.toLowerCase().includes(q)||d.brand?.toLowerCase().includes(q)||(d.rounds||[]).some(r=>r.course?.toLowerCase().includes(q))); }
+      const grid=document.getElementById('discGrid'), empty=document.getElementById('emptyState');
+      if (discs.length===0) { grid.innerHTML=''; empty.classList.remove('hidden'); return; }
+      empty.classList.add('hidden');
+      grid.innerHTML=discs.map(disc=>{ const ti=DT.typeInfo[disc.type]||{emoji:'🥏',label:'Disc'},st=DT.statusInfo[disc.status]||{label:'Active',css:'disc-status--active'},rounds=(disc.rounds||[]).length,last=disc.rounds?.[disc.rounds.length-1],bg=discBg(disc.color); return `<a class="disc-thumb" href="disc.html?id=${disc.id}"><div class="disc-thumb-header" style="background:${bg};"><div class="disc-circle">${ti.emoji}</div><div class="disc-thumb-name"><strong>${disc.name}</strong><span>${disc.brand||''}${disc.plastic?' · '+disc.plastic:''}</span></div></div><div class="disc-thumb-body"><div class="disc-meta">${disc.weight?`<span class="disc-meta-item">⚖️ ${disc.weight}g</span>`:''} ${disc.color?`<span class="disc-meta-item">🎨 ${disc.color}</span>`:''} ${last?`<span class="disc-meta-item">📍 ${last.course}</span>`:''}</div></div><div class="disc-thumb-footer"><span class="disc-rounds-badge">${rounds} round${rounds!==1?'s':''}</span><span class="disc-status ${st.css}">${st.label}</span></div></a>`; }).join('');
+    }
+    let activeFilter='all';
+    document.querySelectorAll('.filter-chip').forEach(chip=>{ chip.addEventListener('click',()=>{ document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active')); chip.classList.add('active'); activeFilter=chip.dataset.filter; renderDiscs(activeFilter,document.getElementById('searchInput').value,document.getElementById('typeFilter').value); }); });
+    document.getElementById('searchInput').addEventListener('input',e=>renderDiscs(activeFilter,e.target.value,document.getElementById('typeFilter').value));
+    document.getElementById('typeFilter').addEventListener('change',e=>renderDiscs(activeFilter,document.getElementById('searchInput').value,e.target.value));
+    function saveRound() { const discId=document.getElementById('logDiscId').value,disc=DT.discs.get(discId); if(!disc) return; const course=document.getElementById('logCourse').value.trim(); if(!course){DT.toast('Please enter a course name','error');return;} disc.rounds=disc.rounds||[]; disc.rounds.push({id:DT.uid(),date:document.getElementById('logDate').value,course,location:document.getElementById('logLocation').value,score:parseInt(document.getElementById('logScore').value)||0,par:parseInt(document.getElementById('logPar').value)||null,throws:parseInt(document.getElementById('logThrows').value)||null,players:document.getElementById('logPlayers').value.split(',').map(p=>p.trim()).filter(Boolean),notes:document.getElementById('logNotes').value}); DT.discs.save(disc); closeModal('logRoundModal'); DT.toast(`Round at ${course} logged!`,'success'); renderStats(); renderDiscs(activeFilter,document.getElementById('searchInput').value,document.getElementById('typeFilter').value); }
+    renderStats(); renderDiscs();
+  </script>
+</body>
+</html>

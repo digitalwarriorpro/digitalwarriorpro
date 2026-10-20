@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Disc Found — DiskTrek</title>
+  <meta name="description" content="You found a disc golf disc! Scan to contact the owner." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+  <div class="found-page">
+    <div class="found-card" id="foundCard">
+      <div id="loadingState" style="padding:60px 32px;text-align:center;"><div style="font-size:48px;margin-bottom:16px;animation:pulse 1.5s infinite;">🥏</div><p style="font-size:16px;color:var(--gray-500);">Loading disc info…</p></div>
+      <div id="foundState" style="display:none;">
+        <div class="found-card-top" id="foundCardTop"><div class="found-icon">🎯</div><h1>You Found a Disc!</h1><p>Please return it to its owner. They'll really appreciate it.</p></div>
+        <div class="found-card-body">
+          <div id="discColorDot" style="width:48px;height:48px;border-radius:50%;margin-bottom:16px;"></div>
+          <div class="found-disc-name" id="foundDiscName"></div>
+          <div class="found-disc-sub" id="foundDiscSub"></div>
+          <div class="found-owner" id="foundOwnerBox"><div class="player-avatar" id="foundOwnerAvatar">?</div><div class="found-owner-info"><strong id="foundOwnerName"></strong><span id="foundOwnerHandle"></span></div></div>
+          <div class="found-actions" id="foundActions"></div>
+          <div id="rewardBox" style="display:none;margin-top:16px;padding:12px 16px;background:var(--green-50);border-radius:var(--radius);border:1px solid var(--green-200);"><div style="font-size:13px;font-weight:700;color:var(--green-800);margin-bottom:4px;">🎁 Reward Offered</div><div style="font-size:13px;color:var(--green-700);" id="rewardText"></div></div>
+          <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-100);text-align:center;"><p style="font-size:12px;color:var(--gray-400);">Disc tracked by</p><a href="index.html" style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--green-800);text-decoration:none;">⬤ DiskTrek</a><p style="font-size:12px;color:var(--gray-400);margin-top:4px;">Register your discs at disktrek.com</p></div>
+        </div>
+      </div>
+      <div id="notFoundState" style="display:none;padding:60px 32px;text-align:center;"><div style="font-size:56px;margin-bottom:16px;">😕</div><h2 style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-bottom:12px;">Disc Not Found</h2><p style="font-size:14px;color:var(--gray-500);margin-bottom:28px;line-height:1.7;">This QR code doesn't match any registered disc in our system.</p><a href="index.html" class="btn btn-primary btn-lg" style="justify-content:center;width:100%;">Visit DiskTrek →</a></div>
+    </div>
+  </div>
+  <script src="js/app.js"></script>
+  <script>
+    DT.seedDemo();
+    const params = new URLSearchParams(window.location.search);
+    const discId = params.get('id');
+    const disc = discId ? DT.discs.get(discId) : null;
+    setTimeout(() => {
+      document.getElementById('loadingState').style.display = 'none';
+      if (!disc) { document.getElementById('notFoundState').style.display = 'block'; return; }
+      const o = disc.owner || {};
+      const typeInfo = DT.typeInfo[disc.type] || { emoji: '🥏', label: 'Disc' };
+      const bg = discBg(disc.color);
+      document.getElementById('foundCardTop').style.background = bg;
+      document.getElementById('discColorDot').style.background = bg;
+      document.getElementById('foundDiscName').textContent = `${disc.brand} ${disc.name}`;
+      document.getElementById('foundDiscSub').textContent = [typeInfo.label, disc.plastic, disc.weight ? disc.weight + 'g' : '', disc.color].filter(Boolean).join(' · ');
+      const initials = (o.name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+      document.getElementById('foundOwnerAvatar').textContent = initials;
+      document.getElementById('foundOwnerName').textContent = o.name || 'Unknown Owner';
+      document.getElementById('foundOwnerHandle').textContent = o.udisc || 'Disc Golf Player';
+      const actions = [];
+      if (o.email) actions.push(`<a href="mailto:${o.email}?subject=I found your disc: ${disc.brand} ${disc.name}" class="btn btn-primary btn-lg">✉️ Email Owner</a>`);
+      if (o.phone) actions.push(`<a href="tel:${o.phone}" class="btn btn-outline btn-lg">📞 Call Owner</a>`);
+      if (o.udisc) actions.push(`<a href="https://udisc.com" target="_blank" class="btn btn-ghost-dark btn-lg">Find on UDisc: ${o.udisc}</a>`);
+      document.getElementById('foundActions').innerHTML = actions.length ? actions.join('') : '<p style="color:var(--gray-400);font-size:14px;text-align:center;">No contact info available.</p>';
+      if (o.reward) { document.getElementById('rewardBox').style.display = 'block'; document.getElementById('rewardText').textContent = o.reward; }
+      disc.lastFoundScan = new Date().toISOString();
+      DT.discs.save(disc);
+      document.getElementById('foundState').style.display = 'block';
+      document.title = `Found: ${disc.brand} ${disc.name} — DiskTrek`;
+    }, 800);
+  </script>
+</body>
+</html>

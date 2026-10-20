@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="DiskTrek — The ultimate disc golf disc tracking platform. Register your discs, generate QR codes, track rounds, courses, and players." />
+  <title>DiskTrek — Track Every Throw, Every Disc, Every Journey</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body class="landing-page">
+  <nav class="nav">
+    <div class="nav-inner container">
+      <a href="index.html" class="nav-logo"><span class="logo-icon">⬤</span>DiskTrek</a>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#stats">Stats</a></li>
+        <li><a href="dashboard.html" class="btn btn-outline btn-sm">Dashboard</a></li>
+        <li><a href="register.html" class="btn btn-primary btn-sm">Register a Disc</a></li>
+      </ul>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
+    </div>
+  </nav>
+  <section class="hero">
+    <div class="hero-bg"><div class="hero-circle c1"></div><div class="hero-circle c2"></div><div class="hero-circle c3"></div></div>
+    <div class="container hero-content">
+      <div class="hero-badge"><span class="badge-dot"></span>Now with UDisc integration support</div>
+      <h1 class="hero-title">Every Disc Has<br /><span class="gradient-text">A Story.</span><br />Start Tracking Yours.</h1>
+      <p class="hero-subtitle">DiskTrek gives every disc golf disc a permanent digital identity. Scan a QR code to see its full journey — courses played, scores, players, and owners — all in one place.</p>
+      <div class="hero-actions">
+        <a href="register.html" class="btn btn-primary btn-lg">Register Your Disc <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+        <a href="#how-it-works" class="btn btn-ghost btn-lg">See How It Works</a>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><span class="stat-num" data-count="12847">0</span><span class="stat-label">Discs Registered</span></div>
+        <div class="hero-stat"><span class="stat-num" data-count="4391">0</span><span class="stat-label">Courses Logged</span></div>
+        <div class="hero-stat"><span class="stat-num" data-count="38200">0</span><span class="stat-label">Rounds Tracked</span></div>
+      </div>
+    </div>
+    <div class="hero-mockups">
+      <div class="disc-card-float f1"><div class="dcf-qr"></div><div class="dcf-info"><strong>Innova Destroyer</strong><span>Maple Hill • -4</span></div></div>
+      <div class="disc-card-float f2"><div class="dcf-badge">FOUND</div><div class="dcf-info"><strong>Discraft Luna</strong><span>Returned to owner ✓</span></div></div>
+      <div class="disc-card-float f3"><div class="dcf-icon">🏆</div><div class="dcf-info"><strong>Tournament Ready</strong><span>PDGA Verified</span></div></div>
+    </div>
+  </section>
+  <section class="section" id="features">
+    <div class="container">
+      <div class="section-header"><span class="section-tag">Features</span><h2>Everything your disc needs</h2><p>From registration to retirement, DiskTrek tracks every moment in a disc's life.</p></div>
+      <div class="features-grid">
+        <div class="feature-card feature-card--primary">
+          <div class="feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h1v1h-1zM19 14h1v1h-1zM14 19h1v1h-1zM19 19h1v1h-1z"/></svg></div>
+          <h3>QR Code Registration</h3><p>Each disc gets a unique, waterproof-printable QR code that links to its full digital profile. One scan reveals everything.</p>
+          <ul class="feature-list"><li>Instant QR generation</li><li>Printable sticker format</li><li>Owner contact info</li></ul>
+        </div>
+        <div class="feature-card"><div class="feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div><h3>Course History</h3><p>Log every course your disc has visited. See a full map of its journey across courses worldwide.</p></div>
+        <div class="feature-card"><div class="feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg></div><h3>Score Tracking</h3><p>Record round scores per disc. Analyze which disc performs best on which course type.</p></div>
+        <div class="feature-card"><div class="feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div><h3>Player History</h3><p>Know every hand that's thrown this disc. Tag players each round and build a community disc network.</p></div>
+        <div class="feature-card"><div class="feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg></div><h3>Lost &amp; Found</h3><p>When someone finds your disc, they scan it and see your contact info instantly. No more lost discs.</p></div>
+        <div class="feature-card"><div class="feature-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div><h3>UDisc Integration</h3><p>Sync your rounds from UDisc automatically. Import courses, scores, and player data seamlessly.</p><span class="feature-badge">Coming Soon</span></div>
+      </div>
+    </div>
+  </section>
+  <section class="section section--dark" id="how-it-works">
+    <div class="container">
+      <div class="section-header"><span class="section-tag">How It Works</span><h2>Three steps to tracking</h2><p>Get your disc on DiskTrek in under two minutes.</p></div>
+      <div class="steps">
+        <div class="step"><div class="step-num">01</div><div class="step-content"><h3>Register Your Disc</h3><p>Enter your disc's details — brand, mold, plastic type, weight, and your contact info. Takes about 60 seconds.</p></div><div class="step-visual sv1"><div class="sv-form"><div class="sv-field"></div><div class="sv-field sv-short"></div><div class="sv-btn"></div></div></div></div>
+        <div class="step step--reverse"><div class="step-num">02</div><div class="step-content"><h3>Print &amp; Stick Your QR</h3><p>Download your unique QR code sticker, print it, and attach it to your disc. Weatherproof and permanent.</p></div><div class="step-visual sv2"><div class="sv-qr-mock"><div class="qr-grid"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div><span>SCAN ME</span></div></div></div>
+        <div class="step"><div class="step-num">03</div><div class="step-content"><h3>Play &amp; Track</h3><p>Log rounds after each game. When someone finds your disc, they scan it and you get notified immediately.</p></div><div class="step-visual sv3"><div class="sv-notif"><div class="sv-notif-icon">🎯</div><div><strong>Disc Found!</strong><span>Your Destroyer was found at Maple Hill</span></div></div></div></div>
+      </div>
+    </div>
+  </section>
+  <section class="section section--brands">
+    <div class="container">
+      <p class="brands-label">Works with discs from all major brands</p>
+      <div class="brands-scroll"><div class="brands-track"><span>Innova</span><span>Discraft</span><span>Dynamic Discs</span><span>MVP Disc Sports</span><span>Latitude 64</span><span>Westside Discs</span><span>Prodigy</span><span>Axiom Discs</span><span>Legacy Discs</span><span>Kastaplast</span><span>Innova</span><span>Discraft</span><span>Dynamic Discs</span><span>MVP Disc Sports</span><span>Latitude 64</span><span>Westside Discs</span><span>Prodigy</span><span>Axiom Discs</span><span>Legacy Discs</span><span>Kastaplast</span></div></div>
+    </div>
+  </section>
+  <section class="section" id="stats">
+    <div class="container">
+      <div class="section-header"><span class="section-tag">Community</span><h2>The DiskTrek Network</h2><p>Join thousands of disc golfers already tracking their discs.</p></div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-icon">🥏</div><div class="stat-big" data-count="12847">0</div><div class="stat-desc">Registered Discs</div></div>
+        <div class="stat-card"><div class="stat-icon">📍</div><div class="stat-big" data-count="4391">0</div><div class="stat-desc">Unique Courses</div></div>
+        <div class="stat-card"><div class="stat-icon">🏌️</div><div class="stat-big" data-count="38200">0</div><div class="stat-desc">Rounds Logged</div></div>
+        <div class="stat-card"><div class="stat-icon">🔍</div><div class="stat-big" data-count="1243">0</div><div class="stat-desc">Discs Returned via QR</div></div>
+      </div>
+    </div>
+  </section>
+  <section class="section section--cta">
+    <div class="container"><div class="cta-box"><div class="cta-circles"><div class="cta-c c1"></div><div class="cta-c c2"></div></div><h2>Ready to give your disc a digital identity?</h2><p>Free to register. No app download needed. Works on any phone with a camera.</p><div class="cta-actions"><a href="register.html" class="btn btn-white btn-lg">Register a Disc — Free</a><a href="dashboard.html" class="btn btn-ghost-white btn-lg">View My Collection</a></div></div></div>
+  </section>
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand"><a href="index.html" class="nav-logo"><span class="logo-icon">⬤</span>DiskTrek</a><p>The #1 disc golf disc tracking platform. Know where your disc has been, and where it's going.</p><div class="footer-social"><a href="#" aria-label="Instagram"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.5" fill="currentColor"/></svg></a><a href="#" aria-label="Twitter/X"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a><a href="#" aria-label="Facebook"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg></a></div></div>
+        <div class="footer-col"><h4>Product</h4><ul><li><a href="register.html">Register a Disc</a></li><li><a href="dashboard.html">My Collection</a></li><li><a href="#features">Features</a></li><li><a href="#how-it-works">How It Works</a></li></ul></div>
+        <div class="footer-col"><h4>Community</h4><ul><li><a href="#">Course Directory</a></li><li><a href="#">Leaderboard</a></li><li><a href="#">Tournaments</a></li><li><a href="#">UDisc Sync</a></li></ul></div>
+        <div class="footer-col"><h4>Company</h4><ul><li><a href="#">About Us</a></li><li><a href="#">Contact</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Use</a></li></ul></div>
+      </div>
+      <div class="footer-bottom"><p>&copy; 2026 DiskTrek. All rights reserved.</p><p>Made with ♥ for the disc golf community</p></div>
+    </div>
+  </footer>
+  <script src="js/app.js"></script>
+  <script>
+    function animateCounters() {
+      document.querySelectorAll('[data-count]').forEach(el => {
+        const target = parseInt(el.dataset.count), step = target / (2000 / 16);
+        let current = 0;
+        const timer = setInterval(() => { current += step; if (current >= target) { current = target; clearInterval(timer); } el.textContent = Math.floor(current).toLocaleString(); }, 16);
+      });
+    }
+    const observer = new IntersectionObserver(entries => { entries.forEach(e => { if (e.isIntersecting) { animateCounters(); observer.disconnect(); } }); }, { threshold: 0.3 });
+    const statSection = document.getElementById('stats');
+    if (statSection) observer.observe(statSection);
+    document.getElementById('navToggle').addEventListener('click', () => { document.querySelector('.nav-links').classList.toggle('open'); });
+    window.addEventListener('scroll', () => { document.querySelector('.nav').classList.toggle('nav--scrolled', window.scrollY > 50); });
+  </script>
+</body>
+</html>
